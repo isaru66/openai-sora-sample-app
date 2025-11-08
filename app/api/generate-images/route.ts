@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       model: model,
       prompt,
       size,
-      quality: "hd",
+      quality: "high",
       n: count,
     });
 
