@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import {
   coerceVideoModel,
   coerceVideoSeconds,
@@ -14,13 +13,13 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    const message = "OPENAI_API_KEY is not configured";
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+  
+  if (!azureEndpoint || !azureApiKey) {
+    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
     return Response.json({ error: { message } }, { status: 500 });
   }
-
-  const client = new OpenAI({ apiKey });
 
   const { id } = await params;
   const videoId = typeof id === "string" ? id.trim() : "";
@@ -32,7 +31,29 @@ export async function GET(
   }
 
   try {
-    const video = await client.get(`/videos/${videoId}`);
+    // For Azure OpenAI, construct the endpoint for video status
+    const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}`;
+    const headers = {
+      "api-key": azureApiKey,
+      "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
+    };
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers,
+    });
+
+    const video = await response.json().catch(() => null);
+    if (!response.ok || !video) {
+      const message = describeError(video, "Failed to fetch video");
+      const derivedStatus = video ? resolveErrorStatus(video) : undefined;
+      const status =
+        typeof derivedStatus === "number" && derivedStatus > 0
+          ? derivedStatus
+          : response.status || 500;
+      return Response.json({ error: { message } }, { status });
+    }
+
     const videoRecord = isRecord(video) ? video : {};
 
     const prompt =

@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
-import { describeError, resolveErrorStatus } from "@/lib/sora";
 import type { GeneratedImageSuggestion } from "@/types/generated";
+import { describeError, resolveErrorStatus } from "@/lib/sora";
+import { createAzureOpenAIClient, getAzureOpenAIImageConfig } from "@/lib/azure-openai";
 
-const IMAGE_MODEL_FALLBACK = "gpt-image-1";
-const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-1"]);
+const IMAGE_MODEL_FALLBACK = "dall-e-3";
+const ALLOWED_IMAGE_MODELS = new Set<string>(["dall-e-3", "dall-e-2"]);
 const MAX_IMAGE_COUNT = 4;
 const DEFAULT_IMAGE_COUNT = 3;
 
-type ImageSize = OpenAI.Images.ImageGenerateParams["size"];
+type ImageSize = "256x256" | "512x512" | "1024x1024" | "1024x1536" | "1536x1024" | "1024x1792" | "1792x1024";
 
 const DEFAULT_IMAGE_SIZE: ImageSize = "1024x1024";
 const ALLOWED_IMAGE_SIZES = new Set<ImageSize>([
@@ -19,7 +19,6 @@ const ALLOWED_IMAGE_SIZES = new Set<ImageSize>([
   "1536x1024",
   "1024x1792",
   "1792x1024",
-  "auto",
 ]);
 
 interface GenerateImagesPayload {
@@ -53,12 +52,7 @@ const coerceImageCount = (value: unknown): number => {
   return Math.round(parsed);
 };
 
-const coerceImageModel = (value: unknown): string => {
-  const candidate = readString(value);
-  if (!candidate) return IMAGE_MODEL_FALLBACK;
-  if (ALLOWED_IMAGE_MODELS.has(candidate)) return candidate;
-  return IMAGE_MODEL_FALLBACK;
-};
+// Model is determined by deployment name in Azure OpenAI, not by model parameter
 
 const coerceImageSize = (value: unknown): ImageSize => {
   const candidate = readString(value);
@@ -70,13 +64,14 @@ const coerceImageSize = (value: unknown): ImageSize => {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    const message = "OPENAI_API_KEY is not configured";
+  let client;
+  try {
+    const config = getAzureOpenAIImageConfig();
+    client = createAzureOpenAIClient(config);
+  } catch (error) {
+    const message = describeError(error, "Azure OpenAI configuration error");
     return NextResponse.json({ error: { message } }, { status: 500 });
   }
-
-  const client = new OpenAI({ apiKey });
 
   let rawPayload: GenerateImagesPayload;
   try {
@@ -98,20 +93,20 @@ export async function POST(request: Request) {
 
   const size = coerceImageSize(rawPayload.size);
   const count = coerceImageCount(rawPayload.count);
-  const model = coerceImageModel(rawPayload.model);
+  // Model is determined by deployment name in Azure OpenAI
 
   try {
     const generation = await client.images.generate({
-      model,
+      model: "", // Azure OpenAI uses deployment name instead of model
       prompt,
       size,
-      quality: "high",
+      quality: "hd",
       n: count,
     });
 
     const suggestions = (generation.data ?? []).reduce<
       GeneratedImageSuggestion[]
-    >((acc, entry, index) => {
+    >((acc: GeneratedImageSuggestion[], entry: { b64_json?: string; url?: string }, index: number) => {
       const base64 = entry.b64_json ?? null;
       const url = base64
         ? `data:image/png;base64,${base64}`

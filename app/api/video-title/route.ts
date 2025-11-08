@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
 import { describeError, resolveErrorStatus } from "@/lib/sora";
-import { TITLE_MODEL } from "@/utils/titles";
+import { createAzureOpenAIClient, getAzureOpenAIConfig } from "@/lib/azure-openai";
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    const message = "OPENAI_API_KEY is not configured";
+  let client;
+  try {
+    const config = getAzureOpenAIConfig();
+    client = createAzureOpenAIClient(config);
+  } catch (error) {
+    const message = describeError(error, "Azure OpenAI configuration error");
     return NextResponse.json({ error: { message } }, { status: 500 });
   }
-
-  const client = new OpenAI({ apiKey });
 
   let payload: unknown;
   try {
@@ -34,23 +34,19 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await client.responses.create({
-      model: TITLE_MODEL,
-      input: [
+    const response = await client.chat.completions.create({
+      model: "", // Azure OpenAI uses deployment name instead of model
+      messages: [
         {
           role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: `Propose a short reel-style title for this video prompt (don't include quotes around the title): ${prompt}`,
-            },
-          ],
+          content: `Propose a short reel-style title for this video prompt (don't include quotes around the title): ${prompt}`,
         },
       ],
-      max_output_tokens: 80,
+      max_tokens: 80,
     });
 
-    return NextResponse.json(response);
+    const title = response.choices[0]?.message?.content?.trim();
+    return NextResponse.json({ title });
   } catch (error) {
     const message = describeError(error, "Failed to generate title");
     const status = resolveErrorStatus(error);

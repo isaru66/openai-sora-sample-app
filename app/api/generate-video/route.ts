@@ -18,9 +18,12 @@ type VideoCreateParams = {
 };
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    const message = "OPENAI_API_KEY is not configured";
+  // For video generation, we still need to check Azure OpenAI configuration
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+  
+  if (!azureEndpoint || !azureApiKey) {
+    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
     return Response.json({ error: { message } }, { status: 500 });
   }
 
@@ -65,21 +68,12 @@ export async function POST(request: Request) {
   };
 
   try {
-    const endpointBase =
-      process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1";
-    const endpoint = `${endpointBase.replace(/\/$/, "")}/videos`;
+    // For Azure OpenAI, construct the endpoint for video generation
+    const endpoint = `${azureEndpoint}/openai/v1/videos`;
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${apiKey}`,
+      "api-key": azureApiKey,
+      "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
     };
-
-    const organization = process.env.OPENAI_ORG_ID?.trim();
-    if (organization) {
-      headers["OpenAI-Organization"] = organization;
-    }
-    const project = process.env.OPENAI_PROJECT_ID?.trim();
-    if (project) {
-      headers["OpenAI-Project"] = project;
-    }
 
     let response: Response;
     if (imageData?.data != null) {

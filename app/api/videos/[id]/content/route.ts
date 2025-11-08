@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import { describeError, resolveErrorStatus } from "@/lib/sora";
 
 const asVariant = (value: string | null): "video" | "thumbnail" | "spritesheet" | undefined => {
@@ -10,13 +9,13 @@ const asVariant = (value: string | null): "video" | "thumbnail" | "spritesheet" 
 };
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    const message = "OPENAI_API_KEY is not configured";
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+  
+  if (!azureEndpoint || !azureApiKey) {
+    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
     return Response.json({ error: { message } }, { status: 500 });
   }
-
-  const client = new OpenAI({ apiKey });
 
   const { id } = await params;
   const videoId = typeof id === "string" ? id.trim() : "";
@@ -28,16 +27,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const variant = asVariant(url.searchParams.get("variant"));
 
   try {
-    const request = client.get(`/videos/${videoId}/content`, {
-      query: variant ? { variant } : undefined,
-      headers: { Accept: "application/binary" },
-      __binaryResponse: true,
+    // For Azure OpenAI, construct the endpoint for video content
+    const query = variant ? `?variant=${variant}` : "";
+    const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}/content${query}`;
+    const headers = {
+      "Accept": "application/binary",
+      "api-key": azureApiKey,
+      "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
+    };
+
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers,
     });
 
-    const apiResponse = await request.asResponse();
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "Failed to fetch video content");
+      const message = describeError({ message: errorText }, "Failed to fetch video content");
+      return Response.json({ error: { message } }, { status: response.status || 500 });
+    }
 
-    const arrayBuffer = await apiResponse.arrayBuffer();
-    const contentType = apiResponse.headers.get("content-type")
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type")
       || (variant === "thumbnail" ? "image/png" : "video/mp4");
 
     return new Response(arrayBuffer, {

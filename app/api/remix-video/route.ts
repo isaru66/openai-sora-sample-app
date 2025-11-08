@@ -1,4 +1,3 @@
-import OpenAI from "openai";
 import {
   coerceVideoModel,
   coerceVideoSeconds,
@@ -11,13 +10,13 @@ import {
 } from "@/lib/sora";
 
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    const message = "OPENAI_API_KEY is not configured";
+  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+  
+  if (!azureEndpoint || !azureApiKey) {
+    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
     return Response.json({ error: { message } }, { status: 500 });
   }
-
-  const client = new OpenAI({ apiKey });
 
   let rawPayload: unknown;
   try {
@@ -46,10 +45,37 @@ export async function POST(request: Request) {
   };
 
   try {
-    const video = await client.post(`/videos/${videoId}/remix`, {
-      body: { prompt },
+    // For Azure OpenAI, construct the endpoint for video remix
+    const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}/remix`;
+    const headers = {
+      "Content-Type": "application/json",
+      "api-key": azureApiKey,
+      "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
+    };
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        prompt,
+        model: fallback.model,
+        size: fallback.size,
+        seconds: fallback.seconds,
+      }),
     });
-    const normalized = normalizeVideoResponse(video, fallback);
+
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result) {
+      const message = describeError(result, "Failed to remix video");
+      const derivedStatus = result ? resolveErrorStatus(result) : undefined;
+      const status =
+        typeof derivedStatus === "number" && derivedStatus > 0
+          ? derivedStatus
+          : response.status || 500;
+      return Response.json({ error: { message } }, { status });
+    }
+
+    const normalized = normalizeVideoResponse(result, fallback);
     return Response.json(normalized);
   } catch (error) {
     const message = describeError(error, "Failed to remix video");
