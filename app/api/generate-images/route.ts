@@ -52,7 +52,12 @@ const coerceImageCount = (value: unknown): number => {
   return Math.round(parsed);
 };
 
-// Model is determined by deployment name in Azure OpenAI, not by model parameter
+const coerceImageModel = (value: unknown): string => {
+  const candidate = readString(value);
+  if (!candidate) return IMAGE_MODEL_FALLBACK;
+  if (ALLOWED_IMAGE_MODELS.has(candidate)) return candidate;
+  return IMAGE_MODEL_FALLBACK;
+};
 
 const coerceImageSize = (value: unknown): ImageSize => {
   const candidate = readString(value);
@@ -93,11 +98,11 @@ export async function POST(request: Request) {
 
   const size = coerceImageSize(rawPayload.size);
   const count = coerceImageCount(rawPayload.count);
-  // Model is determined by deployment name in Azure OpenAI
+  const model = coerceImageModel(rawPayload.model);
 
   try {
     const generation = await client.images.generate({
-      model: "", // Azure OpenAI uses deployment name instead of model
+      model: model,
       prompt,
       size,
       quality: "hd",
