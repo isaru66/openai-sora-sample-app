@@ -31,6 +31,7 @@ jobs:
           app_location: "/" # App source code path
           api_location: "" # Api source code path - optional
           output_location: ".next" # Built app content directory - optional
+          skip_api_build: true # Set to true to skip building api
           ###### End of Repository/Build Configurations ######
         env: # Add environment variables here
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
