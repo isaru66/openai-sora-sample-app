@@ -32,6 +32,13 @@ jobs:
           api_location: "" # Api source code path - optional
           output_location: ".next" # Built app content directory - optional
           ###### End of Repository/Build Configurations ######
+        env: # Add environment variables here
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
+          AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME }}
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
