@@ -41,6 +41,7 @@ jobs:
           AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
           AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME }}
           AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
