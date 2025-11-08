@@ -4,7 +4,7 @@ import { describeError, resolveErrorStatus } from "@/lib/sora";
 import { createAzureOpenAIClient, getAzureOpenAIImageConfig } from "@/lib/azure-openai";
 
 const IMAGE_MODEL_FALLBACK = "dall-e-3";
-const ALLOWED_IMAGE_MODELS = new Set<string>(["dall-e-3", "dall-e-2"]);
+const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-1","dall-e-3", "dall-e-2"]);
 const MAX_IMAGE_COUNT = 4;
 const DEFAULT_IMAGE_COUNT = 3;
 
