@@ -157,7 +157,7 @@ export default function App() {
   const derivedPromptForImages = useMemo(() => prompt.trim(), [prompt]);
   const imageGenerationSize = useMemo(() => {
     const { width, height } = parseSize(size);
-    return height > width ? "1024x1536" : "1536x1024";
+    return height > width ? "1024x1440" : "1440x1024";
   }, [size]);
   const handleUpdateItem = useCallback(
     (id: string, updater: (existing: VideoItem) => VideoItem) => {
