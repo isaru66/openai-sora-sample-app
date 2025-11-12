@@ -1,3 +1,7 @@
+# Note
+
+This repository is a fork of [openai/openai-sora-sample-app](https://github.com/openai/openai-sora-sample-app) with adjustments to use Azure OpenAI instead of the standard OpenAI API.
+
 # Sora Video API sample app
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
