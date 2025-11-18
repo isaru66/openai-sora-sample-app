@@ -33,7 +33,15 @@ jobs:
           output_location: ".next" # Built app content directory - optional
           skip_api_build: true # Set to true to skip building api
           ###### End of Repository/Build Configurations ######
-
+        env: # Add environment variables here
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_API_VERSION: ${{ secrets.AZURE_OPENAI_API_VERSION }}
+          AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME }}
+          AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME }}
+          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
@@ -45,4 +53,5 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AMBITIOUS_COAST_062670210 }}
           action: "close"
+
 
