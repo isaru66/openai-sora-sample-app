@@ -237,8 +237,8 @@ const VideoForm = ({
   const promptHasImage = Boolean(imagePreviewUrl);
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden border-none  shadow-none">
-      <CardContent className="flex flex-1 min-h-0 flex-col overflow-y-auto space-y-6 px-0">
+    <Card className="flex h-full flex-col border-none shadow-none">
+      <CardContent className="flex flex-1 flex-col space-y-6 px-0">
         <section className="rounded-xl border border-border/60 bg-card/80 p-5 shadow-none backdrop-blur-sm">
           <div className="flex flex-col gap-5">
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
