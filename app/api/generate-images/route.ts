@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { GeneratedImageSuggestion } from "@/types/generated";
 import { describeError, resolveErrorStatus } from "@/lib/sora";
-import { createAzureOpenAIClient, getAzureOpenAIImageConfig } from "@/lib/azure-openai";
+import { createAzureOpenAIClient, getAzureOpenAIImageConfig, getAzureAuthHeaders } from "@/lib/azure-openai";
 import axios, { AxiosRequestConfig } from "axios";
 
 const IMAGE_MODEL_FALLBACK = "dall-e-3";
@@ -136,12 +136,12 @@ export async function POST(request: Request) {
     const endpoint = process.env["AZURE_OPENAI_ENDPOINT"] || "https://ai-isarar-2855.cognitiveservices.azure.com/";
     const deployment = "FLUX-1.1-pro";
     const apiVersion = "2025-04-01-preview";
-    const subscriptionKey = process.env["AZURE_OPENAI_API_KEY"];
+    const authHeaders = await getAzureAuthHeaders();
 
     const generationsPath = `openai/deployments/${deployment}/images/generations`;
     const params = `?api-version=${apiVersion}`;
     const generationsUrl = `${endpoint}${generationsPath}${params}`;
-    
+
     const generationBody = {
       prompt,
       n: count,
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     };
     const headers: AxiosRequestConfig = {
       headers: {
-        "Api-Key": subscriptionKey,
+        ...authHeaders,
         "Content-Type": "application/json",
       },
     };

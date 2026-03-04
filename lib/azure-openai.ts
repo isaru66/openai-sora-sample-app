@@ -1,44 +1,76 @@
 import { AzureOpenAI } from 'openai';
 import '@azure/openai/types';
+import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
+
+// Azure Cognitive Services scope used for all Azure OpenAI requests
+const AZURE_COGNITIVESERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default';
 
 export interface AzureOpenAIConfig {
   endpoint: string;
-  apiKey: string;
   deploymentName: string;
   apiVersion?: string;
 }
 
+/**
+ * Returns true when API key authentication is explicitly opted in via USE_AZURE_OPENAI_API_KEY=true.
+ * Defaults to false — uses DefaultAzureCredential instead.
+ */
+function isApiKeyMode(): boolean {
+  return process.env.USE_AZURE_OPENAI_API_KEY?.trim().toLowerCase() === 'true';
+}
+
 export function createAzureOpenAIClient(config: AzureOpenAIConfig): AzureOpenAI {
-  const { endpoint, apiKey, apiVersion = '2024-10-21' } = config;
-  
-  // Create Azure OpenAI client with API key authentication
-  return new AzureOpenAI({
-    endpoint,
-    apiKey,
-    apiVersion,
-    deployment: config.deploymentName
-  });
+  const { endpoint, apiVersion = '2024-10-21' } = config;
+
+  if (isApiKeyMode()) {
+    const apiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+    if (!apiKey) {
+      throw new Error('AZURE_OPENAI_API_KEY is required when USE_AZURE_OPENAI_API_KEY=true');
+    }
+    return new AzureOpenAI({ endpoint, apiKey, apiVersion, deployment: config.deploymentName });
+  }
+
+  // Authenticate with DefaultAzureCredential (supports managed identity,
+  // workload identity, Azure CLI, environment variables, etc.)
+  const credential = new DefaultAzureCredential();
+  const azureADTokenProvider = getBearerTokenProvider(credential, AZURE_COGNITIVESERVICES_SCOPE);
+  return new AzureOpenAI({ endpoint, azureADTokenProvider, apiVersion, deployment: config.deploymentName });
+}
+
+/**
+ * Returns the appropriate auth headers based on the configured auth mode.
+ * - USE_AZURE_OPENAI_API_KEY=true  → { 'api-key': '<AZURE_OPENAI_API_KEY>' }
+ * - USE_AZURE_OPENAI_API_KEY=false → { 'Authorization': 'Bearer <token>' }  (default)
+ * Used by routes that call the REST API directly.
+ */
+export async function getAzureAuthHeaders(): Promise<Record<string, string>> {
+  if (isApiKeyMode()) {
+    const apiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
+    if (!apiKey) {
+      throw new Error('AZURE_OPENAI_API_KEY is required when USE_AZURE_OPENAI_API_KEY=true');
+    }
+    return { 'api-key': apiKey };
+  }
+
+  const credential = new DefaultAzureCredential();
+  const tokenResponse = await credential.getToken(AZURE_COGNITIVESERVICES_SCOPE);
+  if (!tokenResponse?.token) {
+    throw new Error('Failed to acquire Azure AD token via DefaultAzureCredential.');
+  }
+  return { 'Authorization': `Bearer ${tokenResponse.token}` };
 }
 
 /**
  * Validates required environment variables for Azure OpenAI
  */
-function validateAzureOpenAIEnvironment(): { endpoint: string; apiKey: string; apiVersion: string } {
+function validateAzureOpenAIEnvironment(): { endpoint: string; apiVersion: string } {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
-  const apiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
   const apiVersion = process.env.AZURE_OPENAI_API_VERSION?.trim() || '2024-10-21';
 
   if (!endpoint) {
     throw new Error(
       'AZURE_OPENAI_ENDPOINT environment variable is required. ' +
       'Please set it to your Azure OpenAI resource endpoint (e.g., https://your-resource.openai.azure.com/)'
-    );
-  }
-
-  if (!apiKey) {
-    throw new Error(
-      'AZURE_OPENAI_API_KEY environment variable is required. ' +
-      'Please set it to your Azure OpenAI API key.'
     );
   }
 
@@ -51,17 +83,16 @@ function validateAzureOpenAIEnvironment(): { endpoint: string; apiKey: string; a
     );
   }
 
-  return { endpoint, apiKey, apiVersion };
+  return { endpoint, apiVersion };
 }
 
 // Configuration helper for general chat/text models
 export function getAzureOpenAIConfig(): AzureOpenAIConfig {
-  const { endpoint, apiKey, apiVersion } = validateAzureOpenAIEnvironment();
+  const { endpoint, apiVersion } = validateAzureOpenAIEnvironment();
   const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME?.trim() || 'gpt-4';
 
   return {
     endpoint,
-    apiKey,
     deploymentName,
     apiVersion
   };
@@ -69,12 +100,11 @@ export function getAzureOpenAIConfig(): AzureOpenAIConfig {
 
 // Video generation configuration
 export function getAzureOpenAIVideoConfig(): AzureOpenAIConfig {
-  const { endpoint, apiKey, apiVersion } = validateAzureOpenAIEnvironment();
+  const { endpoint, apiVersion } = validateAzureOpenAIEnvironment();
   const deploymentName = process.env.AZURE_OPENAI_VIDEO_DEPLOYMENT_NAME?.trim() || 'sora-2';
 
   return {
     endpoint,
-    apiKey,
     deploymentName,
     apiVersion
   };
@@ -82,12 +112,11 @@ export function getAzureOpenAIVideoConfig(): AzureOpenAIConfig {
 
 // Image generation configuration
 export function getAzureOpenAIImageConfig(): AzureOpenAIConfig {
-  const { endpoint, apiKey, apiVersion } = validateAzureOpenAIEnvironment();
+  const { endpoint, apiVersion } = validateAzureOpenAIEnvironment();
   const deploymentName = process.env.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME?.trim() || 'dall-e-3';
 
   return {
     endpoint,
-    apiKey,
     deploymentName,
     apiVersion
   };

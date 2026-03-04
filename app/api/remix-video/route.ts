@@ -8,13 +8,21 @@ import {
   resolveErrorStatus,
   VideoRequestPayload,
 } from "@/lib/sora";
+import { getAzureAuthHeaders } from "@/lib/azure-openai";
 
 export async function POST(request: Request) {
   const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
-  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
-  
-  if (!azureEndpoint || !azureApiKey) {
-    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
+
+  if (!azureEndpoint) {
+    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT.";
+    return Response.json({ error: { message } }, { status: 500 });
+  }
+
+  let azureAuthHeaders: Record<string, string>;
+  try {
+    azureAuthHeaders = await getAzureAuthHeaders();
+  } catch (error) {
+    const message = describeError(error, "Failed to acquire Azure auth credentials");
     return Response.json({ error: { message } }, { status: 500 });
   }
 
@@ -49,7 +57,7 @@ export async function POST(request: Request) {
     const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}/remix`;
     const headers = {
       "Content-Type": "application/json",
-      "api-key": azureApiKey,
+      ...azureAuthHeaders,
       "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
     };
 

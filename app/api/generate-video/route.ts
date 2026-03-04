@@ -9,6 +9,7 @@ import {
   resolveErrorStatus,
   VideoRequestPayload,
 } from "@/lib/sora";
+import { getAzureAuthHeaders } from "@/lib/azure-openai";
 
 type VideoCreateParams = {
   prompt: string;
@@ -18,12 +19,19 @@ type VideoCreateParams = {
 };
 
 export async function POST(request: Request) {
-  // For video generation, we still need to check Azure OpenAI configuration
+  // For video generation, we call the REST API directly with an Azure AD Bearer token
   const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
-  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
-  
-  if (!azureEndpoint || !azureApiKey) {
-    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
+
+  if (!azureEndpoint) {
+    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT.";
+    return Response.json({ error: { message } }, { status: 500 });
+  }
+
+  let azureAuthHeaders: Record<string, string>;
+  try {
+    azureAuthHeaders = await getAzureAuthHeaders();
+  } catch (error) {
+    const message = describeError(error, "Failed to acquire Azure auth credentials");
     return Response.json({ error: { message } }, { status: 500 });
   }
 
@@ -71,7 +79,7 @@ export async function POST(request: Request) {
     // For Azure OpenAI, construct the endpoint for video generation
     const endpoint = `${azureEndpoint}/openai/v1/videos`;
     const headers: Record<string, string> = {
-      "api-key": azureApiKey,
+      ...azureAuthHeaders,
       "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
     };
 
