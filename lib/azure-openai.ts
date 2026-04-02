@@ -32,9 +32,11 @@ export function createAzureOpenAIClient(config: AzureOpenAIConfig): AzureOpenAI 
 
   // Authenticate with DefaultAzureCredential (supports managed identity,
   // workload identity, Azure CLI, environment variables, etc.)
+  // Pass apiKey: '' to prevent the SDK from auto-reading AZURE_OPENAI_API_KEY from
+  // the environment, which would conflict with azureADTokenProvider.
   const credential = new DefaultAzureCredential();
   const azureADTokenProvider = getBearerTokenProvider(credential, AZURE_COGNITIVESERVICES_SCOPE);
-  return new AzureOpenAI({ endpoint, azureADTokenProvider, apiVersion, deployment: config.deploymentName });
+  return new AzureOpenAI({ endpoint, azureADTokenProvider, apiKey: '', apiVersion, deployment: config.deploymentName });
 }
 
 /**
