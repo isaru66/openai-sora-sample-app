@@ -1,9 +1,28 @@
 import { AzureOpenAI } from 'openai';
 import '@azure/openai/types';
-import { DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
+import { ManagedIdentityCredential, DefaultAzureCredential, getBearerTokenProvider } from '@azure/identity';
 
 // Azure Cognitive Services scope used for all Azure OpenAI requests
 const AZURE_COGNITIVESERVICES_SCOPE = 'https://cognitiveservices.azure.com/.default';
+
+/**
+ * Returns a credential appropriate for the current environment.
+ * - On Azure Static Web Apps / App Service: uses ManagedIdentityCredential directly,
+ *   which relies on the IDENTITY_ENDPOINT + IDENTITY_HEADER env vars injected by the platform.
+ *   This avoids the IMDS probe that fails in SWA environments.
+ * - Locally: falls back to DefaultAzureCredential (Azure CLI, VS Code, etc.)
+ */
+function getCredential() {
+  if (process.env.IDENTITY_ENDPOINT && process.env.IDENTITY_HEADER) {
+    // App Service / SWA managed identity environment
+    const clientId = process.env.AZURE_CLIENT_ID?.trim();
+    return clientId
+      ? new ManagedIdentityCredential(clientId)
+      : new ManagedIdentityCredential();
+  }
+  // Local development: use the full DefaultAzureCredential chain
+  return new DefaultAzureCredential();
+}
 
 export interface AzureOpenAIConfig {
   endpoint: string;
@@ -30,11 +49,10 @@ export function createAzureOpenAIClient(config: AzureOpenAIConfig): AzureOpenAI 
     return new AzureOpenAI({ endpoint, apiKey, apiVersion, deployment: config.deploymentName });
   }
 
-  // Authenticate with DefaultAzureCredential (supports managed identity,
-  // workload identity, Azure CLI, environment variables, etc.)
+  // Authenticate using managed identity on Azure, or DefaultAzureCredential locally.
   // Pass apiKey: '' to prevent the SDK from auto-reading AZURE_OPENAI_API_KEY from
   // the environment, which would conflict with azureADTokenProvider.
-  const credential = new DefaultAzureCredential();
+  const credential = getCredential();
   const azureADTokenProvider = getBearerTokenProvider(credential, AZURE_COGNITIVESERVICES_SCOPE);
   return new AzureOpenAI({ endpoint, azureADTokenProvider, apiKey: '', apiVersion, deployment: config.deploymentName });
 }
@@ -54,7 +72,7 @@ export async function getAzureAuthHeaders(): Promise<Record<string, string>> {
     return { 'api-key': apiKey };
   }
 
-  const credential = new DefaultAzureCredential();
+  const credential = getCredential();
   const tokenResponse = await credential.getToken(AZURE_COGNITIVESERVICES_SCOPE);
   if (!tokenResponse?.token) {
     throw new Error('Failed to acquire Azure AD token via DefaultAzureCredential.');
