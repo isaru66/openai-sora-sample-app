@@ -19,7 +19,6 @@ export async function POST(request: Request) {
     return Response.json({ error: { message } }, { status: 500 });
   }
   const azureEndpoint = videoCfg.endpoint;
-  const azureApiKey = videoCfg.apiKey;
 
   let rawPayload: unknown;
   try {
@@ -50,9 +49,10 @@ export async function POST(request: Request) {
   try {
     // For Azure OpenAI, construct the endpoint for video remix
     const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}/remix`;
+    const authHeaders = await videoCfg.getAuthHeaders();
     const headers = {
       "Content-Type": "application/json",
-      "api-key": azureApiKey,
+      ...authHeaders,
       "api-version": videoCfg.apiVersion,
     };
 

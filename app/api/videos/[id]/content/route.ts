@@ -18,7 +18,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return Response.json({ error: { message } }, { status: 500 });
   }
   const azureEndpoint = videoCfg.endpoint;
-  const azureApiKey = videoCfg.apiKey;
 
   const { id } = await params;
   const videoId = typeof id === "string" ? id.trim() : "";
@@ -33,9 +32,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // For Azure OpenAI, construct the endpoint for video content
     const query = variant ? `?variant=${variant}` : "";
     const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}/content${query}`;
+    const authHeaders = await videoCfg.getAuthHeaders();
     const headers = {
       "Accept": "application/binary",
-      "api-key": azureApiKey,
+      ...authHeaders,
       "api-version": videoCfg.apiVersion,
     };
 
