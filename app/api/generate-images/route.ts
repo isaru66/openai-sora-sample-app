@@ -2,10 +2,9 @@ import { NextResponse } from "next/server";
 import type { GeneratedImageSuggestion } from "@/types/generated";
 import { describeError, resolveErrorStatus } from "@/lib/sora";
 import { createAzureOpenAIClient, getAzureOpenAIImageConfig } from "@/lib/azure-openai";
-import axios, { AxiosRequestConfig } from "axios";
 
-const IMAGE_MODEL_FALLBACK = "dall-e-3";
-const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-1","dall-e-3", "dall-e-2"]);
+const IMAGE_MODEL_FALLBACK = "gpt-image-2";
+const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-2", "gpt-image-1", "dall-e-3", "dall-e-2"]);
 const MAX_IMAGE_COUNT = 4;
 const DEFAULT_IMAGE_COUNT = 3;
 
@@ -102,75 +101,30 @@ export async function POST(request: Request) {
   const model = coerceImageModel(rawPayload.model);
 
   try {
-    /*
-    // Commented out OpenAI gpt-image-1 generation, replace with BFR-Flux-1.1
-
     const generation = await client.images.generate({
-      model: "FLUX-1.1-pro",
+      model,
       prompt,
       size,
-      quality: "high",
-      output_format: "png",
       n: count,
     });
 
-    const suggestions = (generation.data ?? []).reduce<
-      GeneratedImageSuggestion[]
-    >((acc: GeneratedImageSuggestion[], entry: { b64_json?: string; url?: string }, index: number) => {
-      const base64 = entry.b64_json ?? null;
-      const url = base64
-        ? `data:image/png;base64,${base64}`
-        : readString(entry.url);
-      if (!url) return acc;
-      acc.push({
-        id: `generated-${Date.now()}-${index}`,
-        url,
-        base64,
-        description: prompt,
-      });
-      return acc;
-    }, []);
-    */
-    
-    // BlackForest Flux-1.1 image generation via Azure OpenAI REST API
-    const endpoint = process.env["AZURE_OPENAI_ENDPOINT"] || "https://ai-isarar-2855.cognitiveservices.azure.com/";
-    const deployment = "FLUX-1.1-pro";
-    const apiVersion = "2025-04-01-preview";
-    const subscriptionKey = process.env["AZURE_OPENAI_API_KEY"];
-
-    const generationsPath = `openai/deployments/${deployment}/images/generations`;
-    const params = `?api-version=${apiVersion}`;
-    const generationsUrl = `${endpoint}${generationsPath}${params}`;
-    
-    const generationBody = {
-      prompt,
-      n: count,
-      size,
-      output_format: "png",
-    };
-    const headers: AxiosRequestConfig = {
-      headers: {
-        "Api-Key": subscriptionKey,
-        "Content-Type": "application/json",
+    const suggestions = (generation.data ?? []).reduce<GeneratedImageSuggestion[]>(
+      (acc, entry, index) => {
+        const base64 = entry.b64_json ?? null;
+        const url = base64
+          ? `data:image/png;base64,${base64}`
+          : readString(entry.url);
+        if (!url) return acc;
+        acc.push({
+          id: `generated-${Date.now()}-${index}`,
+          url,
+          base64,
+          description: prompt,
+        });
+        return acc;
       },
-    };
-    const generationResponse = await axios.post(generationsUrl, generationBody, headers);
-    
-    const imageData = (generationResponse.data?.data ?? []) as Array<{ b64_json?: string; url?: string }>;
-    const suggestions = imageData.reduce<GeneratedImageSuggestion[]>((acc: GeneratedImageSuggestion[], entry: { b64_json?: string; url?: string }, index: number) => {
-      const base64 = entry.b64_json ?? null;
-      const url = base64
-        ? `data:image/png;base64,${base64}`
-        : readString(entry.url);
-      if (!url) return acc;
-      acc.push({
-        id: `generated-${Date.now()}-${index}`,
-        url,
-        base64,
-        description: prompt,
-      });
-      return acc;
-    }, []);
+      [],
+    );
 
     return NextResponse.json({ images: suggestions });
   } catch (error) {

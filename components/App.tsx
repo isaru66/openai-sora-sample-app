@@ -58,7 +58,7 @@ const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
-const IMAGE_GENERATION_MODEL = "gpt-image-1";
+const IMAGE_GENERATION_MODEL = "gpt-image-2";
 
 const usePreviewState = () => {
   const preview = usePreview();

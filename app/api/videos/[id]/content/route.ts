@@ -1,4 +1,5 @@
 import { describeError, resolveErrorStatus } from "@/lib/sora";
+import { getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
 
 const asVariant = (value: string | null): "video" | "thumbnail" | "spritesheet" | undefined => {
   if (!value) return undefined;
@@ -9,13 +10,15 @@ const asVariant = (value: string | null): "video" | "thumbnail" | "spritesheet" 
 };
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
-  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
-  
-  if (!azureEndpoint || !azureApiKey) {
-    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
+  let videoCfg;
+  try {
+    videoCfg = getAzureOpenAIVideoEndpoint();
+  } catch (error) {
+    const message = describeError(error, "Azure OpenAI video configuration error");
     return Response.json({ error: { message } }, { status: 500 });
   }
+  const azureEndpoint = videoCfg.endpoint;
+  const azureApiKey = videoCfg.apiKey;
 
   const { id } = await params;
   const videoId = typeof id === "string" ? id.trim() : "";
@@ -33,7 +36,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const headers = {
       "Accept": "application/binary",
       "api-key": azureApiKey,
-      "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
+      "api-version": videoCfg.apiVersion,
     };
 
     const response = await fetch(endpoint, {

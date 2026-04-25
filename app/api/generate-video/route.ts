@@ -9,6 +9,7 @@ import {
   resolveErrorStatus,
   VideoRequestPayload,
 } from "@/lib/sora";
+import { getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
 
 type VideoCreateParams = {
   prompt: string;
@@ -18,14 +19,15 @@ type VideoCreateParams = {
 };
 
 export async function POST(request: Request) {
-  // For video generation, we still need to check Azure OpenAI configuration
-  const azureEndpoint = process.env.AZURE_OPENAI_ENDPOINT?.trim();
-  const azureApiKey = process.env.AZURE_OPENAI_API_KEY?.trim();
-  
-  if (!azureEndpoint || !azureApiKey) {
-    const message = "Azure OpenAI configuration is not complete. Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY";
+  let videoCfg;
+  try {
+    videoCfg = getAzureOpenAIVideoEndpoint();
+  } catch (error) {
+    const message = describeError(error, "Azure OpenAI video configuration error");
     return Response.json({ error: { message } }, { status: 500 });
   }
+  const azureEndpoint = videoCfg.endpoint;
+  const azureApiKey = videoCfg.apiKey;
 
   let rawPayload: unknown;
   try {
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
     const endpoint = `${azureEndpoint}/openai/v1/videos`;
     const headers: Record<string, string> = {
       "api-key": azureApiKey,
-      "api-version": process.env.AZURE_OPENAI_API_VERSION || "2024-10-21",
+      "api-version": videoCfg.apiVersion,
     };
 
     let response: Response;
