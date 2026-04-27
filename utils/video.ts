@@ -1,6 +1,6 @@
 export const DEFAULT_SIZE = "1280x720" as const;
 
-export const MODEL_OPTIONS = ["sora-2", "sora-2-pro"] as const;
+export const MODEL_OPTIONS = ["sora-2"] as const;
 export type SoraModel = (typeof MODEL_OPTIONS)[number];
 
 export type SizeOptionGroups = {
@@ -12,10 +12,6 @@ export const MODEL_SIZE_OPTIONS: Record<SoraModel, SizeOptionGroups> = {
   "sora-2": {
     portrait: ["720x1280"],
     landscape: [DEFAULT_SIZE],
-  },
-  "sora-2-pro": {
-    portrait: ["720x1280", "1024x1792"],
-    landscape: [DEFAULT_SIZE, "1792x1024"],
   },
 };
 

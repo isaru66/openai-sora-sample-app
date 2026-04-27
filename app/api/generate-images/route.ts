@@ -5,10 +5,12 @@ import {
   buildAzureOpenAIUrl,
   getAzureOpenAIAuthHeaders,
   getAzureOpenAIImageConfig,
+  getAzureMAIImageConfig,
 } from "@/lib/azure-openai";
 
 const IMAGE_MODEL_FALLBACK = "gpt-image-2";
-const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-2", "gpt-image-1", "dall-e-3", "dall-e-2"]);
+const MAI_IMAGE_MODEL = "MAI-Image-2";
+const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-2", MAI_IMAGE_MODEL]);
 const MAX_IMAGE_COUNT = 4;
 const DEFAULT_IMAGE_COUNT = 3;
 
@@ -42,6 +44,12 @@ type ImageGenerationResponse = {
     url?: string | null;
   }>;
 };
+
+const toImageGenerationResponse = (
+  payloads: ImageGenerationResponse[],
+): ImageGenerationResponse => ({
+  data: payloads.flatMap((payload) => payload.data ?? []),
+});
 
 interface GenerateImagesPayload {
   prompt?: unknown;
@@ -77,6 +85,7 @@ const coerceImageCount = (value: unknown): number => {
 const coerceImageModel = (value: unknown): string => {
   const candidate = readString(value);
   if (!candidate) return IMAGE_MODEL_FALLBACK;
+  if (candidate.toLowerCase() === "mai") return MAI_IMAGE_MODEL;
   if (ALLOWED_IMAGE_MODELS.has(candidate)) return candidate;
   return IMAGE_MODEL_FALLBACK;
 };
@@ -90,15 +99,99 @@ const coerceImageSize = (value: unknown): ImageSize => {
   return DEFAULT_IMAGE_SIZE;
 };
 
-export async function POST(request: Request) {
-  let config;
-  try {
-    config = getAzureOpenAIImageConfig();
-  } catch (error) {
-    const message = describeError(error, "Azure OpenAI configuration error");
-    return NextResponse.json({ error: { message } }, { status: 500 });
+const parseDimensions = (size: ImageSize): { width: number; height: number } => {
+  const [widthRaw, heightRaw] = size.split("x");
+  const width = Number(widthRaw);
+  const height = Number(heightRaw);
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return { width: 1024, height: 1024 };
+  }
+  return { width, height };
+};
+
+const generateWithGptImage = async ({
+  prompt,
+  size,
+  count,
+  model,
+}: {
+  prompt: string;
+  size: ImageSize;
+  count: number;
+  model: string;
+}): Promise<{ generation: ImageGenerationResponse | null; status: number; ok: boolean }> => {
+  const config = getAzureOpenAIImageConfig();
+  const endpoint = buildAzureOpenAIUrl(
+    config.endpoint,
+    `/openai/deployments/${encodeURIComponent(config.deploymentName)}/images/generations`,
+    config.apiVersion ?? "2025-04-01-preview",
+  );
+  const authHeaders = await getAzureOpenAIAuthHeaders(config.apiKey);
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      n: count,
+      output_format: "png",
+      prompt,
+      quality: "medium",
+      size,
+    }),
+  });
+
+  return {
+    generation: (await response.json().catch(() => null)) as ImageGenerationResponse | null,
+    ok: response.ok,
+    status: response.status,
+  };
+};
+
+const generateWithMaiImage = async ({
+  prompt,
+  size,
+  count,
+}: {
+  prompt: string;
+  size: ImageSize;
+  count: number;
+}): Promise<{ generation: ImageGenerationResponse | null; status: number; ok: boolean }> => {
+  const config = getAzureMAIImageConfig();
+  const endpoint = `${config.endpoint.replace(/\/+$/, "")}/mai/v1/images/generations`;
+  const authHeaders = await getAzureOpenAIAuthHeaders(config.apiKey);
+  const { width, height } = parseDimensions(size);
+  const generations: ImageGenerationResponse[] = [];
+
+  for (let index = 0; index < count; index += 1) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: config.deploymentName,
+        prompt,
+        width,
+        height,
+      }),
+    });
+    const generation = (await response.json().catch(() => null)) as
+      | ImageGenerationResponse
+      | null;
+    if (!response.ok || !generation) {
+      return { generation, ok: response.ok, status: response.status };
+    }
+    generations.push(generation);
   }
 
+  return { generation: toImageGenerationResponse(generations), ok: true, status: 200 };
+};
+
+export async function POST(request: Request) {
   let rawPayload: GenerateImagesPayload;
   try {
     rawPayload = (await request.json()) as GenerateImagesPayload;
@@ -122,38 +215,23 @@ export async function POST(request: Request) {
   const model = coerceImageModel(rawPayload.model);
 
   try {
-    const endpoint = buildAzureOpenAIUrl(
-      config.endpoint,
-      `/openai/deployments/${encodeURIComponent(config.deploymentName)}/images/generations`,
-      config.apiVersion ?? "2025-04-01-preview",
-    );
-    const authHeaders = await getAzureOpenAIAuthHeaders(config.apiKey);
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        ...authHeaders,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        n: count,
-        output_format: "png",
-        prompt,
-        quality: "medium",
-        size,
-      }),
-    });
+    const result = model === MAI_IMAGE_MODEL
+      ? await generateWithMaiImage({ prompt, size, count })
+      : await generateWithGptImage({ prompt, size, count, model });
 
-    const generation = (await response.json().catch(() => null)) as
-      | ImageGenerationResponse
-      | null;
-    if (!response.ok || !generation) {
+    const { generation } = result;
+    if (!result.ok || !generation) {
       const message = describeError(generation, "Failed to generate images");
+      console.error("Image generation failed", {
+        model,
+        status: result.status,
+        message,
+      });
       const derivedStatus = generation ? resolveErrorStatus(generation) : undefined;
       const status =
         typeof derivedStatus === "number" && derivedStatus > 0
           ? derivedStatus
-          : response.status || 500;
+          : result.status || 500;
       return NextResponse.json({ error: { message } }, { status });
     }
 

@@ -44,6 +44,7 @@ type AsyncMaybe = void | Promise<unknown>;
 const VERSION_OPTIONS = [1, 2, 3, 4];
 
 type OrientationId = "portrait" | "landscape";
+type FormTab = "video" | "image";
 
 const formatSizeKey = (orientation: OrientationId, sizeValue: string) =>
   `${orientation}|${sizeValue}`;
@@ -105,6 +106,12 @@ export interface VideoFormProps {
   model: SoraModel;
   onModelChange: (value: SoraModel) => void;
   modelOptions: readonly SoraModel[];
+  imageModel: string;
+  onImageModelChange: (value: string) => void;
+  imageModelOptions: readonly string[];
+  imageSize: string;
+  onImageSizeChange: (value: string) => void;
+  imageSizeOptions: readonly string[];
   size: string;
   onSizeChange: (value: string) => void;
   sizeOptionGroups: SizeOptionGroups;
@@ -141,6 +148,12 @@ const VideoForm = ({
   model,
   onModelChange,
   modelOptions,
+  imageModel,
+  onImageModelChange,
+  imageModelOptions,
+  imageSize,
+  onImageSizeChange,
+  imageSizeOptions,
   size,
   onSizeChange,
   sizeOptionGroups,
@@ -171,6 +184,7 @@ const VideoForm = ({
   remixDisabled,
 }: VideoFormProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [activeTab, setActiveTab] = useState<FormTab>("video");
   const versionValue = useMemo(() => {
     const parsed = Number(versionsCount) || 1;
     const normalized = Math.min(4, Math.max(1, parsed));
@@ -216,6 +230,10 @@ const VideoForm = ({
     ? "Generates reference images with GPT-image-2, Azure MAI."
     : "Add a prompt to enable GPT-image-2 image generation.";
 
+  const modelCapability = imageModel === "MAI-Image-2"
+    ? "MAI-Image-2 creates one PNG per request for photorealistic product, marketing, and brand visuals. Width and height stay within the 1024x1024 pixel budget."
+    : "GPT-image-2 supports high-resolution natural-language image generation with flexible aspect ratios and strong instruction following.";
+
   const handleGeneratePromptClick = () => {
     if (!hasPrompt || !onGeneratePrompt) return;
     void onGeneratePrompt();
@@ -244,6 +262,23 @@ const VideoForm = ({
       <CardContent className="flex flex-1 min-h-0 flex-col overflow-y-auto space-y-6 px-0">
         <section className="rounded-xl border border-border/60 bg-card/80 p-5 shadow-none backdrop-blur-sm">
           <div className="flex flex-col gap-5">
+            <div className="inline-flex w-fit rounded-full border border-border/60 bg-muted/50 p-1 text-sm">
+              {([
+                ["video", "Video creation"],
+                ["image", "Image creation"],
+              ] as const).map(([tab, label]) => (
+                <Button
+                  key={tab}
+                  type="button"
+                  variant={activeTab === tab ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setActiveTab(tab)}
+                  className="rounded-full px-4"
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
               <label
                 htmlFor="remix-id"
@@ -336,6 +371,7 @@ const VideoForm = ({
                       Add image
                     </InputGroupButton>
 
+                    {activeTab === "video" ? (
                     <div className="flex min-w-max items-center gap-2">
                       <Select
                         value={model}
@@ -458,7 +494,93 @@ const VideoForm = ({
                         </SelectContent>
                       </Select>
                     </div>
+                    ) : (
+                    <div className="flex min-w-max items-center gap-2">
+                      <Select
+                        value={imageModel}
+                        onValueChange={onImageModelChange}
+                      >
+                        <SelectTrigger className={CONTROL_TRIGGER_CLASS}>
+                          <div className={CONTROL_TRIGGER_CONTENT_CLASS}>
+                            <span className={CONTROL_TRIGGER_LABEL_CLASS}>
+                              Image model
+                            </span>
+                            <div className={CONTROL_TRIGGER_VALUE_CLASS}>
+                              <SelectValue placeholder="Image model" />
+                            </div>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className={CONTROL_CONTENT_CLASS}>
+                          <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Image model
+                          </div>
+                          {imageModelOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <Select value={imageSize} onValueChange={onImageSizeChange}>
+                        <SelectTrigger className={CONTROL_TRIGGER_CLASS}>
+                          <div className={CONTROL_TRIGGER_CONTENT_CLASS}>
+                            <span className={CONTROL_TRIGGER_LABEL_CLASS}>
+                              Image size
+                            </span>
+                            <div className={CONTROL_TRIGGER_VALUE_CLASS}>
+                              <SelectValue placeholder="Image size" />
+                            </div>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className={CONTROL_CONTENT_CLASS}>
+                          <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Image size
+                          </div>
+                          {imageSizeOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <Select
+                        value={versionValue}
+                        onValueChange={handleVersionChange}
+                      >
+                        <SelectTrigger className={CONTROL_TRIGGER_CLASS}>
+                          <div className={CONTROL_TRIGGER_CONTENT_CLASS}>
+                            <span className={CONTROL_TRIGGER_LABEL_CLASS}>
+                              Images
+                            </span>
+                            <div className={CONTROL_TRIGGER_VALUE_CLASS}>
+                              <SelectValue placeholder="Images" />
+                            </div>
+                          </div>
+                        </SelectTrigger>
+                        <SelectContent className={CONTROL_CONTENT_CLASS}>
+                          <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground">
+                            Images
+                          </div>
+                          {VERSION_OPTIONS.map((option) => {
+                            const value = String(option);
+                            return (
+                              <SelectItem key={value} value={value}>
+                                {value}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    )}
                   </div>
+                  {activeTab === "image" ? (
+                    <p className="w-full text-xs text-muted-foreground">
+                      {modelCapability}
+                    </p>
+                  ) : null}
                 </InputGroupAddon>
               </InputGroup>
             </div>
@@ -492,6 +614,7 @@ const VideoForm = ({
                   </TooltipContent>
                 </Tooltip>
 
+                {activeTab === "image" ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="inline-flex">
@@ -521,7 +644,9 @@ const VideoForm = ({
                     {imagePromptTooltip}
                   </TooltipContent>
                 </Tooltip>
+                ) : null}
 
+                {activeTab === "video" ? (
                 <Button
                   onClick={() => {
                     void onSubmit();
@@ -537,6 +662,7 @@ const VideoForm = ({
                   )}
                   Generate video
                 </Button>
+                ) : null}
               </div>
             </TooltipProvider>
           </div>

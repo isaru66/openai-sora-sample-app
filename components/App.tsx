@@ -24,7 +24,6 @@ import {
   ensurePrompt,
   isCompletedStatus,
   normalizeVideo,
-  parseSize,
   sanitizeModel,
   sanitizeSizeForModel,
   type VideoItem,
@@ -53,12 +52,30 @@ type CreateVideoOverrideOptions = {
 };
 
 type DownloadResult = boolean;
+type ImageGenerationModel = "gpt-image-2" | "MAI-Image-2";
 
 const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
 
-const IMAGE_GENERATION_MODEL = "gpt-image-2";
+const IMAGE_MODEL_OPTIONS: readonly ImageGenerationModel[] = [
+  "gpt-image-2",
+  "MAI-Image-2",
+];
+const IMAGE_SIZE_OPTIONS: Record<ImageGenerationModel, readonly string[]> = {
+  "gpt-image-2": ["1024x1024", "1440x1024", "1024x1440"],
+  "MAI-Image-2": ["1024x1024", "1365x768", "768x1365"],
+};
+
+const sanitizeImageModel = (value: string): ImageGenerationModel =>
+  IMAGE_MODEL_OPTIONS.includes(value as ImageGenerationModel)
+    ? (value as ImageGenerationModel)
+    : IMAGE_MODEL_OPTIONS[0];
+
+const sanitizeImageSize = (value: string, imageModel: ImageGenerationModel) => {
+  const options = IMAGE_SIZE_OPTIONS[imageModel];
+  return options.includes(value) ? value : options[0];
+};
 
 const usePreviewState = () => {
   const preview = usePreview();
@@ -91,6 +108,14 @@ export default function App() {
   const [refreshingVideos, setRefreshingVideos] = useState<
     Record<string, boolean>
   >({});
+  const [imageModel, setImageModel] = usePersistedState<ImageGenerationModel>(
+    "sora.imageModel",
+    IMAGE_MODEL_OPTIONS[0]
+  );
+  const [imageSize, setImageSize] = usePersistedState<string>(
+    "sora.imageSize",
+    IMAGE_SIZE_OPTIONS[IMAGE_MODEL_OPTIONS[0]][0]
+  );
 
   const closeMobileSidebar = useCallback(() => {
     setMobileSidebarOpen(false);
@@ -155,10 +180,20 @@ export default function App() {
     currentPreviewIndex < previewableItems.length - 1;
   const showPreviewSpinner = preview.previewLoading && !preview.previewingId;
   const derivedPromptForImages = useMemo(() => prompt.trim(), [prompt]);
-  const imageGenerationSize = useMemo(() => {
-    const { width, height } = parseSize(size);
-    return height > width ? "1024x1440" : "1440x1024";
-  }, [size]);
+  const resolvedImageModel = sanitizeImageModel(imageModel);
+  useEffect(() => {
+    if (imageModel !== resolvedImageModel) {
+      setImageModel(resolvedImageModel);
+    }
+  }, [imageModel, resolvedImageModel, setImageModel]);
+
+  const imageSizeOptions = IMAGE_SIZE_OPTIONS[resolvedImageModel];
+  const resolvedImageSize = sanitizeImageSize(imageSize, resolvedImageModel);
+  useEffect(() => {
+    if (imageSize !== resolvedImageSize) {
+      setImageSize(resolvedImageSize);
+    }
+  }, [imageSize, resolvedImageSize, setImageSize]);
   const handleUpdateItem = useCallback(
     (id: string, updater: (existing: VideoItem) => VideoItem) => {
       setItems((prev) =>
@@ -579,9 +614,9 @@ export default function App() {
 
       const images = await generateImages({
         prompt: derivedPromptForImages,
-        size: imageGenerationSize,
+        size: resolvedImageSize,
         count: normalizedCount,
-        model: IMAGE_GENERATION_MODEL,
+        model: resolvedImageModel,
       });
 
       setGeneratedImages(images);
@@ -598,7 +633,8 @@ export default function App() {
     }
   }, [
     derivedPromptForImages,
-    imageGenerationSize,
+    resolvedImageModel,
+    resolvedImageSize,
     setCurrentTitle,
     versionsCount,
   ]);
@@ -724,6 +760,18 @@ export default function App() {
               model={model}
               onModelChange={(value) => setModel(sanitizeModel(value))}
               modelOptions={MODEL_OPTIONS}
+              imageModel={resolvedImageModel}
+              onImageModelChange={(value) => {
+                const nextModel = sanitizeImageModel(value);
+                setImageModel(nextModel);
+                setImageSize((current) => sanitizeImageSize(current, nextModel));
+              }}
+              imageModelOptions={IMAGE_MODEL_OPTIONS}
+              imageSize={resolvedImageSize}
+              onImageSizeChange={(value) =>
+                setImageSize(sanitizeImageSize(value, resolvedImageModel))
+              }
+              imageSizeOptions={imageSizeOptions}
               size={size}
               onSizeChange={(value) =>
                 setSize(sanitizeSizeForModel(value, model))

@@ -199,13 +199,45 @@ export function getAzureOpenAIConfig(): AzureOpenAIConfig {
 }
 
 export function getAzureOpenAIImageConfig(): AzureOpenAIConfig {
-  const { endpoint, apiKey } = readBaseEnv();
+  const base = readBaseEnv();
+  const endpoint = process.env.AZURE_OPENAI_IMAGE_ENDPOINT?.trim() || base.endpoint;
+  const apiKey =
+    process.env.AZURE_OPENAI_IMAGE_API_KEY?.trim() ||
+    base.apiKey;
   const apiVersion =
     process.env.AZURE_OPENAI_IMAGE_API_VERSION?.trim() ||
     process.env.AZURE_OPENAI_API_VERSION?.trim() ||
     '2025-04-01-preview';
   const deploymentName = process.env.AZURE_OPENAI_IMAGE_DEPLOYMENT_NAME?.trim() || 'gpt-image-2';
   return { endpoint, apiKey, deploymentName, apiVersion };
+}
+
+export function getAzureMAIImageConfig(): AzureOpenAIConfig {
+  const endpoint =
+    process.env.AZURE_MAI_ENDPOINT?.trim() ||
+    process.env.AZURE_OPENAI_IMAGE_ENDPOINT?.trim() ||
+    process.env.AZURE_OPENAI_ENDPOINT?.trim();
+  const apiKey =
+    process.env.AZURE_MAI_API_KEY?.trim() ||
+    process.env.AZURE_OPENAI_IMAGE_API_KEY?.trim() ||
+    process.env.AZURE_OPENAI_API_KEY?.trim() ||
+    undefined;
+  const deploymentName =
+    process.env.AZURE_MAI_IMAGE_DEPLOYMENT_NAME?.trim() ||
+    'MAI-Image-2';
+
+  if (!endpoint) {
+    throw new Error(
+      'AZURE_MAI_ENDPOINT or AZURE_OPENAI_IMAGE_ENDPOINT is required for MAI image generation.'
+    );
+  }
+  try {
+    new URL(endpoint);
+  } catch {
+    throw new Error('AZURE_MAI_ENDPOINT must be a valid URL.');
+  }
+
+  return { endpoint, apiKey, deploymentName };
 }
 
 export interface AzureOpenAIVideoEndpoint {

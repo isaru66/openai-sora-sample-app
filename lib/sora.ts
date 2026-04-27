@@ -1,4 +1,4 @@
-type VideoModel = "sora-2" | "sora-2-pro";
+type VideoModel = "sora-2";
 type VideoSeconds = "4" | "8" | "12";
 type VideoSize = "720x1280" | "1280x720" | "1024x1792" | "1792x1024";
 
@@ -8,7 +8,7 @@ const MODEL_FALLBACK: VideoModel = "sora-2";
 const SIZE_FALLBACK: VideoSize = "1280x720";
 const SECONDS_FALLBACK: VideoSeconds = "4";
 
-const ALLOWED_MODELS = new Set<VideoModel>(["sora-2", "sora-2-pro"]);
+const ALLOWED_MODELS = new Set<VideoModel>(["sora-2"]);
 const ALLOWED_SIZES = new Set<VideoSize>(["720x1280", "1280x720", "1024x1792", "1792x1024"]);
 const ALLOWED_SECONDS = new Set<VideoSeconds>(["4", "8", "12"]);
 
@@ -195,17 +195,24 @@ export const normalizeVideoResponse = (
   return response;
 };
 
-export const describeError = (error: unknown, fallbackMessage: string) => {
-  if (error && typeof error === "object") {
-    const anyError = error as { message?: string };
-    if (typeof anyError.message === "string" && anyError.message.trim()) {
-      return anyError.message;
+export const describeError = (error: unknown, fallbackMessage: string): string => {
+  if (isRecord(error)) {
+    const message = readString(error.message);
+    if (message?.trim()) {
+      return message;
+    }
+    if (isRecord(error.error)) {
+      return describeError(error.error, fallbackMessage);
     }
   }
   return fallbackMessage;
 };
 
-export const resolveErrorStatus = (error: unknown, fallbackStatus = 500) => {
+export const resolveErrorStatus = (error: unknown, fallbackStatus = 500): number => {
+  if (isRecord(error) && isRecord(error.error)) {
+    return resolveErrorStatus(error.error, fallbackStatus);
+  }
+
   if (isRecord(error) && typeof error.status === "number") {
     return error.status;
   }
