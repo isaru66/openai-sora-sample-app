@@ -1,5 +1,5 @@
 import { describeError, resolveErrorStatus } from "@/lib/sora";
-import { getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
+import { buildAzureOpenAIUrl, getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
 
 const asVariant = (value: string | null): "video" | "thumbnail" | "spritesheet" | undefined => {
   if (!value) return undefined;
@@ -30,13 +30,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     // For Azure OpenAI, construct the endpoint for video content
-    const query = variant ? `?variant=${variant}` : "";
-    const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}/content${query}`;
+    const endpoint = buildAzureOpenAIUrl(
+      azureEndpoint,
+      `/openai/v1/videos/${encodeURIComponent(videoId)}/content`,
+      videoCfg.apiVersion,
+      variant ? { variant } : {},
+    );
     const authHeaders = await videoCfg.getAuthHeaders();
     const headers = {
       "Accept": "application/binary",
       ...authHeaders,
-      "api-version": videoCfg.apiVersion,
     };
 
     const response = await fetch(endpoint, {

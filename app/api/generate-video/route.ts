@@ -9,7 +9,7 @@ import {
   resolveErrorStatus,
   VideoRequestPayload,
 } from "@/lib/sora";
-import { getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
+import { buildAzureOpenAIUrl, getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
 
 type VideoCreateParams = {
   prompt: string;
@@ -70,11 +70,14 @@ export async function POST(request: Request) {
 
   try {
     // For Azure OpenAI, construct the endpoint for video generation
-    const endpoint = `${azureEndpoint}/openai/v1/videos`;
+    const endpoint = buildAzureOpenAIUrl(
+      azureEndpoint,
+      "/openai/v1/videos",
+      videoCfg.apiVersion,
+    );
     const authHeaders = await videoCfg.getAuthHeaders();
     const headers: Record<string, string> = {
       ...authHeaders,
-      "api-version": videoCfg.apiVersion,
     };
 
     let response: Response;

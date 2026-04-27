@@ -1,25 +1,47 @@
 import { NextResponse } from "next/server";
 import type { GeneratedImageSuggestion } from "@/types/generated";
 import { describeError, resolveErrorStatus } from "@/lib/sora";
-import { createAzureOpenAIClient, getAzureOpenAIImageConfig } from "@/lib/azure-openai";
+import {
+  buildAzureOpenAIUrl,
+  getAzureOpenAIAuthHeaders,
+  getAzureOpenAIImageConfig,
+} from "@/lib/azure-openai";
 
 const IMAGE_MODEL_FALLBACK = "gpt-image-2";
 const ALLOWED_IMAGE_MODELS = new Set<string>(["gpt-image-2", "gpt-image-1", "dall-e-3", "dall-e-2"]);
 const MAX_IMAGE_COUNT = 4;
 const DEFAULT_IMAGE_COUNT = 3;
 
-type ImageSize = "256x256" | "512x512" | "1024x1024" | "1024x1536" | "1536x1024" | "1024x1792" | "1792x1024";
+type ImageSize =
+  | "256x256"
+  | "512x512"
+  | "1024x1024"
+  | "1024x1440"
+  | "1024x1536"
+  | "1440x1024"
+  | "1536x1024"
+  | "1024x1792"
+  | "1792x1024";
 
 const DEFAULT_IMAGE_SIZE: ImageSize = "1024x1024";
 const ALLOWED_IMAGE_SIZES = new Set<ImageSize>([
   "256x256",
   "512x512",
   "1024x1024",
+  "1024x1440",
   "1024x1536",
+  "1440x1024",
   "1536x1024",
   "1024x1792",
   "1792x1024",
 ]);
+
+type ImageGenerationResponse = {
+  data?: Array<{
+    b64_json?: string | null;
+    url?: string | null;
+  }>;
+};
 
 interface GenerateImagesPayload {
   prompt?: unknown;
@@ -69,10 +91,9 @@ const coerceImageSize = (value: unknown): ImageSize => {
 };
 
 export async function POST(request: Request) {
-  let client;
+  let config;
   try {
-    const config = getAzureOpenAIImageConfig();
-    client = createAzureOpenAIClient(config);
+    config = getAzureOpenAIImageConfig();
   } catch (error) {
     const message = describeError(error, "Azure OpenAI configuration error");
     return NextResponse.json({ error: { message } }, { status: 500 });
@@ -101,12 +122,40 @@ export async function POST(request: Request) {
   const model = coerceImageModel(rawPayload.model);
 
   try {
-    const generation = await client.images.generate({
-      model,
-      prompt,
-      size,
-      n: count,
+    const endpoint = buildAzureOpenAIUrl(
+      config.endpoint,
+      `/openai/deployments/${encodeURIComponent(config.deploymentName)}/images/generations`,
+      config.apiVersion ?? "2025-04-01-preview",
+    );
+    const authHeaders = await getAzureOpenAIAuthHeaders(config.apiKey);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        n: count,
+        output_format: "png",
+        prompt,
+        quality: "medium",
+        size,
+      }),
     });
+
+    const generation = (await response.json().catch(() => null)) as
+      | ImageGenerationResponse
+      | null;
+    if (!response.ok || !generation) {
+      const message = describeError(generation, "Failed to generate images");
+      const derivedStatus = generation ? resolveErrorStatus(generation) : undefined;
+      const status =
+        typeof derivedStatus === "number" && derivedStatus > 0
+          ? derivedStatus
+          : response.status || 500;
+      return NextResponse.json({ error: { message } }, { status });
+    }
 
     const suggestions = (generation.data ?? []).reduce<GeneratedImageSuggestion[]>(
       (acc, entry, index) => {

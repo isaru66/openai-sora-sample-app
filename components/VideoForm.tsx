@@ -212,6 +212,9 @@ const VideoForm = ({
   const promptTooltip = hasPrompt
     ? "Uses your current prompt to guide the result."
     : "Add a prompt to enable this action.";
+  const imagePromptTooltip = hasPrompt
+    ? "Generates reference images with GPT-image-2, Azure MAI."
+    : "Add a prompt to enable GPT-image-2 image generation.";
 
   const handleGeneratePromptClick = () => {
     if (!hasPrompt || !onGeneratePrompt) return;
@@ -510,12 +513,12 @@ const VideoForm = ({
                         ) : (
                           <ImageIcon className="h-4 w-4" />
                         )}
-                        Generate image
+                        Generate image (GPT-image-2, Azure MAI)
                       </Button>
                     </span>
                   </TooltipTrigger>
                   <TooltipContent className="rounded-md border border-border bg-card/95 px-3 py-1.5 text-xs text-muted-foreground shadow-none">
-                    {promptTooltip}
+                    {imagePromptTooltip}
                   </TooltipContent>
                 </Tooltip>
 

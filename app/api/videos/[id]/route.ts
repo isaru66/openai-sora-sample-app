@@ -8,7 +8,7 @@ import {
   resolveErrorStatus,
   VideoRequestPayload,
 } from "@/lib/sora";
-import { getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
+import { buildAzureOpenAIUrl, getAzureOpenAIVideoEndpoint } from "@/lib/azure-openai";
 
 export async function GET(
   _request: Request,
@@ -34,11 +34,14 @@ export async function GET(
 
   try {
     // For Azure OpenAI, construct the endpoint for video status
-    const endpoint = `${azureEndpoint}/openai/v1/videos/${videoId}`;
+    const endpoint = buildAzureOpenAIUrl(
+      azureEndpoint,
+      `/openai/v1/videos/${encodeURIComponent(videoId)}`,
+      videoCfg.apiVersion,
+    );
     const authHeaders = await videoCfg.getAuthHeaders();
     const headers = {
       ...authHeaders,
-      "api-version": videoCfg.apiVersion,
     };
 
     const response = await fetch(endpoint, {
