@@ -24,6 +24,10 @@ import {
 } from "@/components/ui/input-group";
 import { cn } from "@/lib/utils";
 import {
+  IMAGE_PROMPT_TEMPLATES,
+  getImagePromptTemplate,
+} from "@/lib/image-prompt-templates";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -99,6 +103,11 @@ Second scene: ในแผงขายผลไม้ ภาพตัดไป�
 
 type OrientationId = "portrait" | "landscape";
 type FormTab = "video" | "image";
+
+export interface PromptGenerationOptions {
+  mode: FormTab;
+  imageTemplateId?: string;
+}
 
 const formatSizeKey = (orientation: OrientationId, sizeValue: string) =>
   `${orientation}|${sizeValue}`;
@@ -184,7 +193,7 @@ export interface VideoFormProps {
   generatedImageError: string;
   onSubmit: () => AsyncMaybe;
   onClear: () => void;
-  onGeneratePrompt?: () => AsyncMaybe;
+  onGeneratePrompt?: (options: PromptGenerationOptions) => AsyncMaybe;
   generatingPrompt?: boolean;
   submitting: boolean;
   canSubmit: boolean;
@@ -238,6 +247,9 @@ const VideoForm = ({
   const [promptTemplateId, setPromptTemplateId] = useState<string>(
     VIDEO_PROMPT_TEMPLATES[0].id
   );
+  const [imagePromptTemplateId, setImagePromptTemplateId] = useState<string>(
+    IMAGE_PROMPT_TEMPLATES[0].id
+  );
   const versionValue = useMemo(() => {
     const parsed = Number(versionsCount) || 1;
     const normalized = Math.min(4, Math.max(1, parsed));
@@ -276,9 +288,13 @@ const VideoForm = ({
   }, [size, sizeOptionGroups]);
 
   const hasPrompt = prompt.trim().length > 0;
-  const promptTooltip = hasPrompt
-    ? "Enhances your current prompt for video generation."
-    : "Creates a video prompt from the selected Sora settings.";
+  const promptTooltip = activeTab === "image"
+    ? hasPrompt
+      ? "Fine-tunes your image prompt using the selected GPT-image-2 template."
+      : "Creates an image prompt from the selected GPT-image-2 template."
+    : hasPrompt
+      ? "Enhances your current prompt for video generation."
+      : "Creates a video prompt from the selected Sora settings.";
   const imagePromptTooltip = hasPrompt
     ? "Generates reference images with GPT-image-2, Azure MAI."
     : "Add a prompt to enable GPT-image-2 image generation.";
@@ -289,7 +305,10 @@ const VideoForm = ({
 
   const handleGeneratePromptClick = () => {
     if (!onGeneratePrompt) return;
-    void onGeneratePrompt();
+    void onGeneratePrompt({
+      mode: activeTab,
+      imageTemplateId: activeTab === "image" ? imagePromptTemplateId : undefined,
+    });
   };
 
   const selectedPromptTemplate =
@@ -299,6 +318,37 @@ const VideoForm = ({
   const applyPromptTemplate = () => {
     onPromptChange(selectedPromptTemplate.prompt);
     onSecondsChange(selectedPromptTemplate.seconds);
+  };
+
+  const selectedImagePromptTemplate = getImagePromptTemplate(imagePromptTemplateId);
+
+  const getPreferredImageSize = () => {
+    if (imageModel === "MAI-Image-2") {
+      switch (selectedImagePromptTemplate.preferredAspectRatio) {
+        case "16:9":
+          return "1365x768";
+        case "9:16":
+        case "3:4":
+          return "768x1365";
+        default:
+          return "1024x1024";
+      }
+    }
+
+    switch (selectedImagePromptTemplate.preferredAspectRatio) {
+      case "16:9":
+        return "1440x1024";
+      case "9:16":
+      case "3:4":
+        return "1024x1440";
+      default:
+        return "1024x1024";
+    }
+  };
+
+  const applyImagePromptTemplate = () => {
+    onPromptChange(selectedImagePromptTemplate.prompt);
+    onImageSizeChange(getPreferredImageSize());
   };
 
   const handleVersionChange = (value: string) => {
@@ -691,6 +741,75 @@ const VideoForm = ({
                     Use template
                   </Button>
                 </div>
+              </div>
+            ) : null}
+
+            {activeTab === "image" ? (
+              <div className="flex flex-col gap-4 rounded-xl border border-border/60 bg-muted/35 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      GPT-image-2 prompt template
+                    </p>
+                    <p className="text-sm text-foreground">
+                      Select a proven image pattern, prefill the prompt, then
+                      edit placeholders like [subject], [city], or Thai text.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={applyImagePromptTemplate}
+                    className="rounded-full whitespace-nowrap"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Use template
+                  </Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+                  <Select
+                    value={imagePromptTemplateId}
+                    onValueChange={setImagePromptTemplateId}
+                  >
+                    <SelectTrigger className={CONTROL_TRIGGER_CLASS}>
+                      <div className={CONTROL_TRIGGER_CONTENT_CLASS}>
+                        <span className={CONTROL_TRIGGER_LABEL_CLASS}>
+                          Template
+                        </span>
+                        <div className={CONTROL_TRIGGER_VALUE_CLASS}>
+                          <SelectValue placeholder="Image template" />
+                        </div>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className={CONTROL_CONTENT_CLASS}>
+                      {IMAGE_PROMPT_TEMPLATES.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-foreground">
+                        {selectedImagePromptTemplate.label}
+                      </span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">
+                        {selectedImagePromptTemplate.category}
+                      </span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px]">
+                        {selectedImagePromptTemplate.preferredAspectRatio}
+                      </span>
+                    </div>
+                    {selectedImagePromptTemplate.description}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Generate prompt uses the selected template to expand or
+                  fine-tune your text with GPT-image-2 best practices: style,
+                  subject, environment, lighting, composition, technical specs,
+                  exact text handling, micro-details, and aspect ratio.
+                </p>
               </div>
             ) : null}
 

@@ -191,6 +191,10 @@ export interface SuggestPromptRequest {
   seconds?: string | number;
   model?: string;
   size?: string;
+  mode?: "video" | "image";
+  imageTemplateId?: string;
+  imageModel?: string;
+  imageSize?: string;
 }
 
 export interface SuggestPromptResponse {

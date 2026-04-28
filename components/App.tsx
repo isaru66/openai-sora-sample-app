@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import VideoForm, {
   type BatchProgressState,
   type GeneratedImageSuggestion,
+  type PromptGenerationOptions,
 } from "@/components/VideoForm";
 import VideoSidebar, {
   type SidebarPreviewState,
@@ -725,7 +726,9 @@ export default function App() {
     []
   );
 
-  const handleSuggestPrompt = useCallback(async () => {
+  const handleSuggestPrompt = useCallback(async (
+    options: PromptGenerationOptions = { mode: "video" },
+  ) => {
     setCurrentTitle("");
     setGeneratingPrompt(true);
     try {
@@ -734,6 +737,10 @@ export default function App() {
         seconds,
         model,
         size,
+        mode: options.mode,
+        imageTemplateId: options.imageTemplateId,
+        imageModel: resolvedImageModel,
+        imageSize: resolvedImageSize,
       });
 
       const trimmed = suggestion.trim();
@@ -759,6 +766,8 @@ export default function App() {
   }, [
     model,
     prompt,
+    resolvedImageModel,
+    resolvedImageSize,
     seconds,
     setCurrentTitle,
     setGeneratedImageError,
