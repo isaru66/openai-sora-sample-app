@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Loader2, Menu } from "lucide-react";
+import { Download, Loader2, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VideoForm, {
   type BatchProgressState,
@@ -67,6 +67,17 @@ const IMAGE_SIZE_OPTIONS: Record<ImageGenerationModel, readonly string[]> = {
   "MAI-Image-2": ["1024x1024", "1365x768", "768x1365"],
 };
 
+const buildImageDownloadName = (image: GeneratedImageSuggestion): string => {
+  const safeDescription = (image.description || "")
+    .replace(/[<>:"/\\|?*]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .join("-");
+  return `${(safeDescription || image.id || "generated-image").slice(0, 60)}.png`;
+};
+
 const sanitizeImageModel = (value: string): ImageGenerationModel =>
   IMAGE_MODEL_OPTIONS.includes(value as ImageGenerationModel)
     ? (value as ImageGenerationModel)
@@ -103,6 +114,8 @@ export default function App() {
   const [selectedGeneratedImageId, setSelectedGeneratedImageId] = useState<
     string | null
   >(null);
+  const [previewImage, setPreviewImage] =
+    useState<GeneratedImageSuggestion | null>(null);
   const [generatingPrompt, setGeneratingPrompt] = useState<boolean>(false);
   const [isMobileSidebarOpen, setMobileSidebarOpen] = useState<boolean>(false);
   const [refreshingVideos, setRefreshingVideos] = useState<
@@ -620,6 +633,12 @@ export default function App() {
       });
 
       setGeneratedImages(images);
+      if (
+        images.length > 0
+        && window.matchMedia("(max-width: 1023px)").matches
+      ) {
+        setMobileSidebarOpen(true);
+      }
       if (images.length === 0) {
         setGeneratedImageError("No images returned. Try another prompt.");
       }
@@ -661,6 +680,49 @@ export default function App() {
       }
     },
     [handleGeneratedImageDataUrl, handleGeneratedImageUrl, setCurrentTitle]
+  );
+
+  const handleDownloadGeneratedImage = useCallback(
+    async (image: GeneratedImageSuggestion): Promise<DownloadResult> => {
+      if (!image?.url) return false;
+      let objectUrl: string | null = null;
+      try {
+        const anchor = document.createElement("a");
+        anchor.href = image.url;
+        anchor.download = buildImageDownloadName(image);
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        return true;
+      } catch (error) {
+        try {
+          const response = await fetch(image.url);
+          if (!response.ok) {
+            throw new Error(response.statusText || "Failed to download image.");
+          }
+          const blob = await response.blob();
+          objectUrl = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = objectUrl;
+          anchor.download = buildImageDownloadName(image);
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          return true;
+        } catch (fetchError) {
+          console.error("Image download failed", fetchError || error);
+          setGeneratedImageError(
+            fetchError instanceof Error
+              ? fetchError.message
+              : "Failed to download image."
+          );
+          return false;
+        } finally {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+        }
+      }
+    },
+    []
   );
 
   const handleSuggestPrompt = useCallback(async () => {
@@ -719,9 +781,14 @@ export default function App() {
       <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">
         <VideoSidebar
           items={items}
+          generatedImages={generatedImages}
+          selectedGeneratedImageId={selectedGeneratedImageId}
           thumbnails={thumbnails}
           onDownloadAll={handleDownloadAll}
           downloadingAll={downloadingAll}
+          onDownloadImage={handleDownloadGeneratedImage}
+          onPreviewImage={setPreviewImage}
+          onUseImageAsReference={handleGeneratedImageSelect}
           onDownload={handleDownload}
           onPlayPreview={handlePlayPreview}
           onRemix={handleRemixFrom}
@@ -789,8 +856,6 @@ export default function App() {
               onGenerateImages={handleGenerateInputImages}
               generatingImages={generatingImages}
               generatedImages={generatedImages}
-              onSelectGeneratedImage={handleGeneratedImageSelect}
-              selectedGeneratedImageId={selectedGeneratedImageId}
               generatedImageError={generatedImageError}
               onSubmit={() => handleCreateVideo()}
               onClear={handleResetForm}
@@ -826,6 +891,56 @@ export default function App() {
         hasNext={hasNextPreview}
         onDownload={handleDownload}
       />
+      {previewImage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/80 px-4 py-4 backdrop-blur">
+          <div className="relative flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-card shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground">
+                  Generated image preview
+                </div>
+                {previewImage.description ? (
+                  <div className="truncate text-xs text-muted-foreground">
+                    {previewImage.description}
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    void handleDownloadGeneratedImage(previewImage);
+                  }}
+                  className="rounded-full"
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPreviewImage(null)}
+                  aria-label="Close image preview"
+                  className="rounded-full"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto bg-neutral-950/95 p-4">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewImage.url}
+                alt={previewImage.description || "Generated image preview"}
+                className="mx-auto max-h-[78vh] max-w-full rounded-lg object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

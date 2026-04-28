@@ -57,12 +57,12 @@ export async function POST(request: Request) {
   try {
     const response = await client.chat.completions.create({
       model: "", // Azure OpenAI uses deployment name instead of model
-      max_tokens: 200,
+      max_tokens: 700,
       temperature: 0.8,
       messages: [
         {
           role: "system",
-          content: "You are a creative director crafting vivid video prompts for the OpenAI Sora model. Respond with a single prompt, without additional commentary.",
+          content: "You are a creative director crafting production-ready prompts for the OpenAI Sora model. Respond with one prompt only. Include visual style, timing/scene beats, on-screen text when useful, camera motion, audio or voiceover direction, and reference-image instructions when the user mentions a character or uploaded image.",
         },
         {
           role: "user",

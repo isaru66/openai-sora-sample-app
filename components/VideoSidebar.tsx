@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Download, Loader2, X, PlayCircle } from "lucide-react";
+import { Download, ImageIcon, Loader2, PlayCircle, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import VideoCard from "./VideoCard";
 import { isCompletedStatus, type VideoItem } from "../utils/video";
+import type { GeneratedImageSuggestion } from "@/types/generated";
 
 type AsyncMaybe = void | Promise<unknown>;
 
@@ -21,9 +22,14 @@ export type SidebarPreviewState = {
 
 export interface VideoSidebarProps {
   items: VideoItem[];
+  generatedImages: GeneratedImageSuggestion[];
+  selectedGeneratedImageId: string | null;
   thumbnails: Record<string, string>;
   onDownloadAll: () => void;
   downloadingAll: boolean;
+  onDownloadImage: (image: GeneratedImageSuggestion) => AsyncMaybe;
+  onPreviewImage: (image: GeneratedImageSuggestion) => AsyncMaybe;
+  onUseImageAsReference: (image: GeneratedImageSuggestion) => AsyncMaybe;
   onDownload: (item: VideoItem) => AsyncMaybe;
   onPlayPreview: (item: VideoItem) => AsyncMaybe;
   onRemix: (item: VideoItem) => AsyncMaybe;
@@ -38,9 +44,14 @@ export interface VideoSidebarProps {
 
 const VideoSidebar = ({
   items,
+  generatedImages,
+  selectedGeneratedImageId,
   thumbnails,
   onDownloadAll,
   downloadingAll,
+  onDownloadImage,
+  onPreviewImage,
+  onUseImageAsReference,
   onDownload,
   onPlayPreview,
   onRemix,
@@ -59,6 +70,7 @@ const VideoSidebar = ({
       ),
     [items]
   );
+  const hasGenerations = items.length > 0 || generatedImages.length > 0;
 
   const downloadHint = downloadingAll
     ? "Downloading completed videos…"
@@ -125,16 +137,16 @@ const VideoSidebar = ({
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto bg-muted/40 px-3 py-4">
-          {items.length === 0 ? (
+          {!hasGenerations ? (
             <div className="flex h-full items-center justify-center px-2 py-6">
               <Empty className="max-w-sm border-none bg-transparent shadow-none">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <PlayCircle className="h-6 w-6" />
                   </EmptyMedia>
-                  <EmptyTitle>No videos generated yet</EmptyTitle>
+                  <EmptyTitle>No generations yet</EmptyTitle>
                   <EmptyDescription>
-                    Start by generating videos to see them appear in your
+                    Start by generating videos or images to see them appear in your
                     library.
                   </EmptyDescription>
                 </EmptyHeader>
@@ -142,6 +154,86 @@ const VideoSidebar = ({
             </div>
           ) : (
             <div className="flex flex-col gap-3">
+              {generatedImages.map((image) => {
+                const isSelected = selectedGeneratedImageId === image.id;
+                return (
+                  <div
+                    key={image.id}
+                    className={cn(
+                      "overflow-hidden rounded-xl border bg-card/80 transition-colors",
+                      isSelected
+                        ? "border-indigo-500 ring-2 ring-indigo-200"
+                        : "border-border/60 hover:bg-card"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onPreviewImage(image)}
+                      className="block h-60 w-full overflow-hidden bg-muted text-left"
+                      aria-label="Preview generated image"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={image.url}
+                        alt={image.description || "Generated image"}
+                        className="h-full w-full object-cover transition duration-300 hover:scale-[1.02]"
+                      />
+                    </button>
+                    <div className="space-y-3 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">
+                            Generated image
+                          </div>
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            {image.id}
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
+                          Image
+                        </span>
+                      </div>
+                      {image.description ? (
+                        <p className="line-clamp-2 whitespace-pre-line text-xs text-foreground/90">
+                          {image.description}
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => onDownloadImage(image)}
+                          className="rounded-full px-3 text-xs font-semibold"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Download
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onPreviewImage(image)}
+                          className="rounded-full border-border px-3 text-xs"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          Preview
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onUseImageAsReference(image)}
+                          className="rounded-full border-border px-3 text-xs"
+                        >
+                          <Wand2 className="h-3.5 w-3.5" />
+                          Use as reference
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {items.map((item) => (
                 <VideoCard
                   key={item.id}

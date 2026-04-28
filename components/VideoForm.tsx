@@ -43,6 +43,60 @@ type AsyncMaybe = void | Promise<unknown>;
 
 const VERSION_OPTIONS = [1, 2, 3, 4];
 
+const VIDEO_PROMPT_TEMPLATES = [
+  {
+    id: "genai-2025",
+    label: "GenAI 2025 cinematic",
+    seconds: "8" as SoraSeconds,
+    prompt: `cinematic video showcasing the advanced phase of Generative AI. Use realistic, high-tech visuals with fast transitions and glowing neon accents. Tone: fast, exciting.
+
+Timing & Scenes:
+0-2 sec:
+- Visual: Realistic video editing interface with AI assembling clips automatically.
+- Text: "Video (2025)" (bottom center).
+- Audio: Ambient tech sound only (no voice yet).
+
+2-5 sec:
+- Visual: Brain-like holographic structure with glowing memory nodes and contextual data streams.
+- Text: "Memory & Contextual Awareness (2025)" (bottom center).
+- Voice: "Video creation in 2025... with memory and contextual awareness..."
+
+5-7 sec:
+- Visual: Realistic futuristic city with autonomous AI agents (robots and avatars) interacting with humans.
+- Text: "Autonomous Agents (2025)" (bottom center).
+- Voice: "...and autonomous agents shaping the future..."
+
+7-8 sec:
+- Visual: Bold tagline glowing: "GenAI: The Next Frontier" (center, large, metallic neon effect).
+- Audio: Music crescendo, no voice.
+
+Voiceover:
+- Tone: Fast, exciting, realistic.
+- Script: "Video creation in 2025... with memory and contextual awareness... and autonomous agents shaping the future..."
+
+Background Music:
+- Futuristic electronic soundtrack with fast tempo, ending in a crescendo at second 8.`,
+  },
+  {
+    id: "thai-market-reference",
+    label: "Thai market reference animation",
+    seconds: "8" as SoraSeconds,
+    prompt: `HD quality, 3D video animation, cartoon network style. Scene set in Thailand fresh market.
+Use the uploaded image for character reference in the video.
+Reference image:
+- ปีศาจหนี้ ตัวละครขวาสุด เสียงทุ้มต่ำ
+- ป้าแสง ตัวละครซ้าย แม่ค้าขายผลไม้ เสียงแก่ แหบนิดๆ
+- พิม (ตำรวจการเงิน SCB หญิง) ตัวละครที่สาม เสียงสดใส
+- ต้น (ตำรวจการเงิน SCB ชาย) ตัวละครขวาสุด เสียงนุ่มนวล
+
+Use the scene for reference and create characters regarding the reference image. Create the 3D video animation.
+
+First scene: scene set in the fresh market. Debt demon flashy quickly appear on the shoulder of ป้าแสง and says "เงินไม่พอ ก็กู้เลยซิ".
+
+Second scene: ในแผงขายผลไม้ ภาพตัดไปบนมือถือบนมือป้าแสง บนมือถือมีภาพ online shopping app มือป้าแสง เอื้อมไปกดปุ่ม "เงินกู้ด่วน".`,
+  },
+] as const;
+
 type OrientationId = "portrait" | "landscape";
 type FormTab = "video" | "image";
 
@@ -127,8 +181,6 @@ export interface VideoFormProps {
   onGenerateImages: () => AsyncMaybe;
   generatingImages: boolean;
   generatedImages: GeneratedImageSuggestion[];
-  onSelectGeneratedImage: (image: GeneratedImageSuggestion) => AsyncMaybe;
-  selectedGeneratedImageId: string | null;
   generatedImageError: string;
   onSubmit: () => AsyncMaybe;
   onClear: () => void;
@@ -169,8 +221,6 @@ const VideoForm = ({
   onGenerateImages,
   generatingImages,
   generatedImages = [],
-  onSelectGeneratedImage,
-  selectedGeneratedImageId,
   generatedImageError,
   onSubmit,
   onClear,
@@ -185,6 +235,9 @@ const VideoForm = ({
 }: VideoFormProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<FormTab>("video");
+  const [promptTemplateId, setPromptTemplateId] = useState<string>(
+    VIDEO_PROMPT_TEMPLATES[0].id
+  );
   const versionValue = useMemo(() => {
     const parsed = Number(versionsCount) || 1;
     const normalized = Math.min(4, Math.max(1, parsed));
@@ -224,8 +277,8 @@ const VideoForm = ({
 
   const hasPrompt = prompt.trim().length > 0;
   const promptTooltip = hasPrompt
-    ? "Uses your current prompt to guide the result."
-    : "Add a prompt to enable this action.";
+    ? "Enhances your current prompt for video generation."
+    : "Creates a video prompt from the selected Sora settings.";
   const imagePromptTooltip = hasPrompt
     ? "Generates reference images with GPT-image-2, Azure MAI."
     : "Add a prompt to enable GPT-image-2 image generation.";
@@ -235,8 +288,17 @@ const VideoForm = ({
     : "GPT-image-2 supports high-resolution natural-language image generation with flexible aspect ratios and strong instruction following.";
 
   const handleGeneratePromptClick = () => {
-    if (!hasPrompt || !onGeneratePrompt) return;
+    if (!onGeneratePrompt) return;
     void onGeneratePrompt();
+  };
+
+  const selectedPromptTemplate =
+    VIDEO_PROMPT_TEMPLATES.find((template) => template.id === promptTemplateId)
+    ?? VIDEO_PROMPT_TEMPLATES[0];
+
+  const applyPromptTemplate = () => {
+    onPromptChange(selectedPromptTemplate.prompt);
+    onSecondsChange(selectedPromptTemplate.seconds);
   };
 
   const handleVersionChange = (value: string) => {
@@ -585,6 +647,53 @@ const VideoForm = ({
               </InputGroup>
             </div>
 
+            {activeTab === "video" ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-muted/35 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Automated prompt
+                  </p>
+                  <p className="text-sm text-foreground">
+                    Start from a proven Sora prompt structure, then edit the
+                    text before generating.
+                  </p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Select
+                    value={promptTemplateId}
+                    onValueChange={setPromptTemplateId}
+                  >
+                    <SelectTrigger className={CONTROL_TRIGGER_CLASS}>
+                      <div className={CONTROL_TRIGGER_CONTENT_CLASS}>
+                        <span className={CONTROL_TRIGGER_LABEL_CLASS}>
+                          Template
+                        </span>
+                        <div className={CONTROL_TRIGGER_VALUE_CLASS}>
+                          <SelectValue placeholder="Template" />
+                        </div>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className={CONTROL_CONTENT_CLASS}>
+                      {VIDEO_PROMPT_TEMPLATES.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={applyPromptTemplate}
+                    className="rounded-full whitespace-nowrap"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Use template
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
             <TooltipProvider delayDuration={150}>
               <div className="flex flex-col md:flex-row md:items-center justify-end gap-2">
                 <Tooltip>
@@ -596,7 +705,7 @@ const VideoForm = ({
                         size="lg"
                         onClick={handleGeneratePromptClick}
                         disabled={
-                          !hasPrompt || generatingPrompt || !onGeneratePrompt
+                          generatingPrompt || !onGeneratePrompt
                         }
                         className="w-full rounded-full bg-muted/60 px-5 text-xs text-foreground hover:bg-muted/70 disabled:opacity-50 md:w-auto md:text-sm"
                       >
@@ -688,45 +797,10 @@ const VideoForm = ({
           ) : null}
 
           {generatedImages.length > 0 ? (
-            <section className="rounded-xl border border-border/60 bg-card/80 p-4 shadow-none">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Generated suggestions
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {generatedImages.map((image) => {
-                  const isSelected = selectedGeneratedImageId === image.id;
-                  return (
-                    <Button
-                      key={image.id}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        void onSelectGeneratedImage(image);
-                      }}
-                      className={cn(
-                        "group relative flex h-auto w-full overflow-hidden rounded-lg border bg-card p-0",
-                        isSelected
-                          ? "border-indigo-500 ring-2 ring-indigo-200"
-                          : "border-border hover:border-border/70"
-                      )}
-                    >
-                      <div className="relative h-24 w-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={image.url}
-                          alt={image.description || "Generated option"}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                      {isSelected ? (
-                        <span className="absolute inset-0 bg-indigo-500/10" />
-                      ) : null}
-                    </Button>
-                  );
-                })}
-              </div>
-            </section>
+            <p className="rounded-lg border border-border/60 bg-card/80 px-4 py-3 text-xs text-muted-foreground">
+              Generated images are available in the library panel for preview,
+              download, and use as video reference images.
+            </p>
           ) : null}
 
           {batchProgress && batchProgress.total > 1 ? (
