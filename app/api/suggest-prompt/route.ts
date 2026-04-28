@@ -20,12 +20,57 @@ interface SuggestPromptPayload {
   imageTemplateId?: unknown;
   imageModel?: unknown;
   imageSize?: unknown;
+  webResearch?: unknown;
 }
 
 const readString = (value: unknown): string | null =>
   typeof value === "string" && value.trim() ? value.trim() : null;
 
-// Removed unused functions - using direct chat completion response parsing
+const readBoolean = (value: unknown): boolean =>
+  value === true || value === "true" || value === "1";
+
+const normalizeResearchQuery = (value: string): string =>
+  value
+    .replace(/\[[^\]]+\]/g, " ")
+    .replace(/['"`]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+
+const fetchWikipediaContext = async (query: string): Promise<string | null> => {
+  const normalized = normalizeResearchQuery(query);
+  if (!normalized) return null;
+
+  const searchUrl = new URL("https://en.wikipedia.org/w/api.php");
+  searchUrl.searchParams.set("action", "query");
+  searchUrl.searchParams.set("list", "search");
+  searchUrl.searchParams.set("srsearch", normalized);
+  searchUrl.searchParams.set("format", "json");
+  searchUrl.searchParams.set("origin", "*");
+  searchUrl.searchParams.set("srlimit", "2");
+
+  const searchResponse = await fetch(searchUrl, {
+    headers: { "User-Agent": "sora-sample-app/1.0" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!searchResponse.ok) return null;
+  const searchPayload = (await searchResponse.json().catch(() => null)) as
+    | { query?: { search?: Array<{ title?: string; snippet?: string }> } }
+    | null;
+  const results = searchPayload?.query?.search ?? [];
+  const summaries = results
+    .map((result) => {
+      const title = result.title?.trim();
+      const snippet = result.snippet
+        ?.replace(/<[^>]+>/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      return title && snippet ? `${title}: ${snippet}` : null;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+
+  return summaries.length ? summaries.join("\n") : null;
+};
 
 export async function POST(request: Request) {
   let client;
@@ -52,6 +97,7 @@ export async function POST(request: Request) {
   const imageTemplate = getImagePromptTemplate(readString(payload.imageTemplateId));
   const imageModel = readString(payload.imageModel) ?? "gpt-image-2";
   const imageSize = readString(payload.imageSize) ?? "1024x1024";
+  const webResearch = readBoolean(payload.webResearch);
 
   const contextLines = mode === "image"
     ? [
@@ -74,6 +120,19 @@ export async function POST(request: Request) {
         ? `User draft to fine-tune: ${existingPrompt}`
         : `Existing prompt: ${existingPrompt}`,
     );
+  }
+
+  if (mode === "image" && webResearch) {
+    try {
+      const research = await fetchWikipediaContext(
+        existingPrompt ?? imageTemplate.prompt,
+      );
+      if (research) {
+        contextLines.push(`Public web research context:\n${research}`);
+      }
+    } catch (error) {
+      console.warn("Web research context unavailable", error);
+    }
   }
 
   try {

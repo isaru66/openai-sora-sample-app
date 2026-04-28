@@ -175,6 +175,8 @@ export interface VideoFormProps {
   imageSize: string;
   onImageSizeChange: (value: string) => void;
   imageSizeOptions: readonly string[];
+  imageWebResearch: boolean;
+  onImageWebResearchChange: (value: boolean) => void;
   size: string;
   onSizeChange: (value: string) => void;
   sizeOptionGroups: SizeOptionGroups;
@@ -215,6 +217,8 @@ const VideoForm = ({
   imageSize,
   onImageSizeChange,
   imageSizeOptions,
+  imageWebResearch,
+  onImageWebResearchChange,
   size,
   onSizeChange,
   sizeOptionGroups,
@@ -810,6 +814,22 @@ const VideoForm = ({
                   subject, environment, lighting, composition, technical specs,
                   exact text handling, micro-details, and aspect ratio.
                 </p>
+                <label className="flex items-start gap-2 rounded-lg border border-border/60 bg-card/70 px-3 py-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={imageWebResearch}
+                    onChange={(event) =>
+                      onImageWebResearchChange(event.target.checked)
+                    }
+                    className="mt-0.5"
+                  />
+                  <span>
+                    Add web research context when generating prompts. The app
+                    looks up public reference context and includes it in the
+                    prompt-generation step; the image model itself does not
+                    browse the internet directly.
+                  </span>
+                </label>
               </div>
             ) : null}
 

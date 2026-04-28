@@ -162,6 +162,7 @@ export interface GenerateImagesRequest {
   size?: string;
   count?: number;
   model?: string;
+  imageFile?: File | null;
 }
 
 export interface GenerateImagesResponse {
@@ -173,11 +174,22 @@ export const generateImages = async ({
   size,
   count,
   model,
+  imageFile,
 }: GenerateImagesRequest): Promise<GeneratedImageSuggestion[]> => {
+  let imagePayload: Record<string, string> | null = null;
+  if (imageFile) {
+    const base64 = await fileToBase64(imageFile);
+    imagePayload = {
+      data: base64,
+      mimeType: imageFile.type || "application/octet-stream",
+      name: imageFile.name || "reference-image",
+    };
+  }
+
   const response = await fetch(`${API_BASE}/generate-images`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, size, count, model }),
+    body: JSON.stringify({ prompt, size, count, model, image: imagePayload }),
   });
   const payload = await parseJson<GenerateImagesResponse>(response);
   if (!response.ok) {
@@ -195,6 +207,7 @@ export interface SuggestPromptRequest {
   imageTemplateId?: string;
   imageModel?: string;
   imageSize?: string;
+  webResearch?: boolean;
 }
 
 export interface SuggestPromptResponse {

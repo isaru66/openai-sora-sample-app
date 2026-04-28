@@ -54,6 +54,7 @@ type CreateVideoOverrideOptions = {
 
 type DownloadResult = boolean;
 type ImageGenerationModel = "gpt-image-2" | "MAI-Image-2";
+const IMAGE_RESULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 const scrollToTop = () => {
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -87,6 +88,33 @@ const sanitizeImageModel = (value: string): ImageGenerationModel =>
 const sanitizeImageSize = (value: string, imageModel: ImageGenerationModel) => {
   const options = IMAGE_SIZE_OPTIONS[imageModel];
   return options.includes(value) ? value : options[0];
+};
+
+const parseTimestampMs = (value: unknown): number | null => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 1e12 ? value : value * 1000;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsedNumeric = Number(value);
+    if (Number.isFinite(parsedNumeric)) {
+      return parsedNumeric > 1e12 ? parsedNumeric : parsedNumeric * 1000;
+    }
+    const parsedDate = Date.parse(value);
+    return Number.isFinite(parsedDate) ? parsedDate : null;
+  }
+  return null;
+};
+
+const isExpiredVideo = (item: VideoItem): boolean => {
+  const expiresAt = parseTimestampMs(item.expires_at ?? item.expiresAt);
+  return expiresAt !== null && expiresAt <= Date.now();
+};
+
+const isExpiredImage = (image: GeneratedImageSuggestion): boolean => {
+  const expiresAt = parseTimestampMs(image.expiresAt);
+  if (expiresAt !== null) return expiresAt <= Date.now();
+  const createdAt = parseTimestampMs(image.createdAt);
+  return createdAt !== null && Date.now() - createdAt > IMAGE_RESULT_TTL_MS;
 };
 
 const usePreviewState = () => {
@@ -129,6 +157,10 @@ export default function App() {
   const [imageSize, setImageSize] = usePersistedState<string>(
     "sora.imageSize",
     IMAGE_SIZE_OPTIONS[IMAGE_MODEL_OPTIONS[0]][0]
+  );
+  const [imageWebResearch, setImageWebResearch] = usePersistedState<boolean>(
+    "sora.imageWebResearch",
+    true
   );
 
   const closeMobileSidebar = useCallback(() => {
@@ -218,6 +250,17 @@ export default function App() {
     },
     [setItems]
   );
+
+  const pruneExpiredLibraryItems = useCallback(() => {
+    setItems((prev) => prev.filter((item) => !isExpiredVideo(item)));
+    setGeneratedImages((prev) => prev.filter((image) => !isExpiredImage(image)));
+  }, [setItems]);
+
+  useEffect(() => {
+    pruneExpiredLibraryItems();
+    const interval = window.setInterval(pruneExpiredLibraryItems, 60_000);
+    return () => window.clearInterval(interval);
+  }, [pruneExpiredLibraryItems]);
 
   const handleRefreshVideo = useCallback(
     async (item: VideoItem) => {
@@ -593,7 +636,6 @@ export default function App() {
       setCurrentTitle("");
       setSelectedGeneratedImageId(null);
       if (event?.target?.files?.length) {
-        setGeneratedImages([]);
         setGeneratedImageError("");
       }
       await handleImageSelect(event);
@@ -606,7 +648,6 @@ export default function App() {
       setGeneratedImageError(
         "Provide a prompt before generating reference images."
       );
-      setGeneratedImages([]);
       setSelectedGeneratedImageId(null);
       return;
     }
@@ -614,7 +655,6 @@ export default function App() {
     setCurrentTitle("");
     setGeneratingImages(true);
     setGeneratedImageError("");
-    setGeneratedImages([]);
     setSelectedGeneratedImageId(null);
 
     try {
@@ -626,14 +666,26 @@ export default function App() {
         )
       );
 
+      const effectiveImageModel = imageFile ? "gpt-image-2" : resolvedImageModel;
+      const effectiveImageSize = imageFile
+        ? sanitizeImageSize(resolvedImageSize, "gpt-image-2")
+        : resolvedImageSize;
+      if (imageFile && resolvedImageModel !== "gpt-image-2") {
+        setImageModel("gpt-image-2");
+        setImageSize(effectiveImageSize);
+      }
+
       const images = await generateImages({
         prompt: derivedPromptForImages,
-        size: resolvedImageSize,
+        size: effectiveImageSize,
         count: normalizedCount,
-        model: resolvedImageModel,
+        model: effectiveImageModel,
+        imageFile,
       });
 
-      setGeneratedImages(images);
+      setGeneratedImages((current) =>
+        [...images, ...current].filter((image) => !isExpiredImage(image))
+      );
       if (
         images.length > 0
         && window.matchMedia("(max-width: 1023px)").matches
@@ -653,9 +705,12 @@ export default function App() {
     }
   }, [
     derivedPromptForImages,
+    imageFile,
     resolvedImageModel,
     resolvedImageSize,
     setCurrentTitle,
+    setImageModel,
+    setImageSize,
     versionsCount,
   ]);
 
@@ -741,6 +796,7 @@ export default function App() {
         imageTemplateId: options.imageTemplateId,
         imageModel: resolvedImageModel,
         imageSize: resolvedImageSize,
+        webResearch: imageWebResearch,
       });
 
       const trimmed = suggestion.trim();
@@ -751,7 +807,6 @@ export default function App() {
 
       setPrompt(trimmed);
       setSelectedGeneratedImageId(null);
-      setGeneratedImages([]);
       setGeneratedImageError("");
     } catch (error) {
       console.error("Prompt suggestion failed", error);
@@ -768,10 +823,10 @@ export default function App() {
     prompt,
     resolvedImageModel,
     resolvedImageSize,
+    imageWebResearch,
     seconds,
     setCurrentTitle,
     setGeneratedImageError,
-    setGeneratedImages,
     setPrompt,
     setSelectedGeneratedImageId,
     size,
@@ -795,6 +850,7 @@ export default function App() {
           thumbnails={thumbnails}
           onDownloadAll={handleDownloadAll}
           downloadingAll={downloadingAll}
+          onRefreshLibrary={pruneExpiredLibraryItems}
           onDownloadImage={handleDownloadGeneratedImage}
           onPreviewImage={setPreviewImage}
           onUseImageAsReference={handleGeneratedImageSelect}
@@ -848,6 +904,8 @@ export default function App() {
                 setImageSize(sanitizeImageSize(value, resolvedImageModel))
               }
               imageSizeOptions={imageSizeOptions}
+              imageWebResearch={imageWebResearch}
+              onImageWebResearchChange={setImageWebResearch}
               size={size}
               onSizeChange={(value) =>
                 setSize(sanitizeSizeForModel(value, model))

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Download, ImageIcon, Loader2, PlayCircle, Wand2, X } from "lucide-react";
+import { Download, ImageIcon, Loader2, PlayCircle, RefreshCcw, Wand2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -27,6 +27,7 @@ export interface VideoSidebarProps {
   thumbnails: Record<string, string>;
   onDownloadAll: () => void;
   downloadingAll: boolean;
+  onRefreshLibrary: () => void;
   onDownloadImage: (image: GeneratedImageSuggestion) => AsyncMaybe;
   onPreviewImage: (image: GeneratedImageSuggestion) => AsyncMaybe;
   onUseImageAsReference: (image: GeneratedImageSuggestion) => AsyncMaybe;
@@ -49,6 +50,7 @@ const VideoSidebar = ({
   thumbnails,
   onDownloadAll,
   downloadingAll,
+  onRefreshLibrary,
   onDownloadImage,
   onPreviewImage,
   onUseImageAsReference,
@@ -96,6 +98,16 @@ const VideoSidebar = ({
             <div className="text-xs text-muted-foreground">{downloadHint}</div>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={onRefreshLibrary}
+              className="hidden rounded-full whitespace-nowrap lg:inline-flex"
+            >
+              <RefreshCcw className="h-4 w-4" />
+              Refresh
+            </Button>
             <Button
               size="sm"
               variant="outline"

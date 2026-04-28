@@ -60,10 +60,29 @@ interface GenerateImagesPayload {
   size?: unknown;
   count?: unknown;
   model?: unknown;
+  image?: unknown;
+}
+
+interface ImageInputPayload {
+  data: string;
+  mimeType?: string;
+  name?: string;
 }
 
 const readString = (value: unknown): string | null =>
   typeof value === "string" && value.trim() ? value.trim() : null;
+
+const readImageInput = (value: unknown): ImageInputPayload | null => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const data = readString(candidate.data);
+  if (!data) return null;
+  return {
+    data: data.includes(",") ? data.split(",").pop() ?? data : data,
+    mimeType: readString(candidate.mimeType) ?? "image/png",
+    name: readString(candidate.name) ?? "reference-image.png",
+  };
+};
 
 const readNumber = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -118,34 +137,55 @@ const generateWithGptImage = async ({
   size,
   count,
   model,
+  image,
 }: {
   prompt: string;
   size: ImageSize;
   count: number;
   model: string;
+  image: ImageInputPayload | null;
 }): Promise<{ generation: ImageGenerationResponse | null; status: number; ok: boolean }> => {
   const config = getAzureOpenAIImageConfig();
+  const basePath = `/openai/deployments/${encodeURIComponent(config.deploymentName)}/images`;
   const endpoint = buildAzureOpenAIUrl(
     config.endpoint,
-    `/openai/deployments/${encodeURIComponent(config.deploymentName)}/images/generations`,
+    `${basePath}/${image ? "edits" : "generations"}`,
     config.apiVersion ?? "2025-04-01-preview",
   );
   const authHeaders = await getAzureOpenAIAuthHeaders(config.apiKey);
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      ...authHeaders,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      n: count,
-      output_format: "png",
-      prompt,
-      quality: "medium",
-      size,
-    }),
-  });
+  const response = image
+    ? await fetch(endpoint, {
+        method: "POST",
+        headers: authHeaders,
+        body: (() => {
+          const form = new FormData();
+          const imageBuffer = Buffer.from(image.data, "base64");
+          const imageBlob = new Blob([imageBuffer], {
+            type: image.mimeType || "image/png",
+          });
+          form.set("image", imageBlob, image.name || "reference-image.png");
+          form.set("prompt", prompt);
+          form.set("n", String(count));
+          form.set("quality", "medium");
+          form.set("size", size);
+          return form;
+        })(),
+      })
+    : await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          ...authHeaders,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          n: count,
+          output_format: "png",
+          prompt,
+          quality: "medium",
+          size,
+        }),
+      });
 
   return {
     generation: (await response.json().catch(() => null)) as ImageGenerationResponse | null,
@@ -217,11 +257,31 @@ export async function POST(request: Request) {
   const size = coerceImageSize(rawPayload.size);
   const count = coerceImageCount(rawPayload.count);
   const model = coerceImageModel(rawPayload.model);
+  const image = readImageInput(rawPayload.image);
 
   try {
+    if (image && model === MAI_IMAGE_MODEL) {
+      return NextResponse.json(
+        {
+          error: {
+            message:
+              "Reference images are supported for GPT-image-2. Switch the image model to GPT-image-2 to use the attached image.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    console.log("Image generation request", {
+      model,
+      size,
+      count,
+      hasReferenceImage: Boolean(image),
+    });
+
     const result = model === MAI_IMAGE_MODEL
       ? await generateWithMaiImage({ prompt, size, count })
-      : await generateWithGptImage({ prompt, size, count, model });
+      : await generateWithGptImage({ prompt, size, count, model, image });
 
     const { generation } = result;
     if (!result.ok || !generation) {
@@ -251,6 +311,10 @@ export async function POST(request: Request) {
           url,
           base64,
           description: prompt,
+          model,
+          size,
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         });
         return acc;
       },
